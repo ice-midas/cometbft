@@ -274,6 +274,9 @@ type BaseConfig struct {
 	// If true, query the ABCI app on connecting to a new peer
 	// so the app can decide if we should keep the connection or not
 	FilterPeers bool `mapstructure:"filter_peers"` // false
+
+	// User-level options use an anonymous struct
+	UserConfig `mapstructure:",squash"`
 }
 
 // DefaultBaseConfig returns a default base configuration for a CometBFT node.
@@ -292,6 +295,7 @@ func DefaultBaseConfig() BaseConfig {
 		FilterPeers:        false,
 		DBBackend:          "goleveldb",
 		DBPath:             DefaultDataDir,
+		UserConfig:         DefaultUserConfig(),
 	}
 }
 
@@ -300,7 +304,16 @@ func TestBaseConfig() BaseConfig {
 	cfg := DefaultBaseConfig()
 	cfg.ProxyApp = "kvstore"
 	cfg.DBBackend = "memdb"
+	cfg.UserConfig = DefaultUserConfig()
 	return cfg
+}
+
+// DefaultUserConfig returns a default user genesis configuration for a CometBFT node.
+func DefaultUserConfig() UserConfig {
+	return UserConfig{
+		Replication: SingularReplicationMode(),
+		UserScopes:  map[string][]string{}, // empty scopes
+	}
 }
 
 // GenesisFile returns the full path to the genesis.json file.
@@ -1576,4 +1589,57 @@ func (cfg *DataCompanionPruningConfig) ValidateBasic() error {
 		return errors.New("initial_block_results_retain_height cannot be negative")
 	}
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// DataReplicationConfig
+
+// DataReplicationConfig exports a string interface
+type DataReplicationConfig interface {
+	fmt.Stringer
+}
+
+// replMode is unexported to prevent invalid values
+type replMode struct {
+	string
+}
+
+func (m replMode) String() string {
+	return m.string
+}
+
+// SingularReplicationMode() returns the Singular genesis mode (genesis doc)
+func SingularReplicationMode() DataReplicationConfig {
+	return replMode{"Singular"}
+}
+
+// PluralReplicationMode() returns the Plural genesis mode (genesis doc set)
+func PluralReplicationMode() DataReplicationConfig {
+	return replMode{"Plural"}
+}
+
+// -----------------------------------------------------------------------------
+// UserConfig
+
+// UserConfig defines the per-user-scope state replication configuration for a
+// CometBFT node.
+type UserConfig struct {
+	// Replication determines which network mode is used (singular or plural).
+	// In singular mode, replicates a single state instance on the network.
+	// In plural mode, replicates multiple per-user state instances on the network.
+	Replication DataReplicationConfig `mapstructure:"replication"`
+
+	// UserScopes contains arbitrary string arrays, e.g. {"default"} mapped to
+	// user addresses such that state is replicated amongst multiple scopes, and one
+	// user may or may not populate databases (tables) for each of these scopes.
+	UserScopes map[string][]string `mapstructure:"scopes"`
+}
+
+// GetAddress() returns a list of user address from the UserScopes in config.
+func (c *UserConfig) GetAddresses() []string {
+	r := make([]string, 0, len(c.UserScopes))
+	for k := range c.UserScopes {
+		r = append(r, k)
+	}
+	return r
 }
