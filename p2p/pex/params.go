@@ -53,3 +53,67 @@ const (
 	// NOTE: this must match "maxMsgSize".
 	maxGetSelection = 250
 )
+
+func NeedAddressThreshold() int {
+	return needAddressThreshold
+}
+
+func NewBucketSize() int {
+	return newBucketSize
+}
+
+func OldBucketSize() int {
+	return oldBucketSize
+}
+
+func NewBucketCount() uint64 {
+	return newBucketCount
+}
+
+func OldBucketCount() uint64 {
+	return oldBucketCount
+}
+
+func NewBucketsPerGroup() uint64 {
+	return newBucketsPerGroup
+}
+
+func OldBucketsPerGroup() uint64 {
+	return oldBucketsPerGroup
+}
+
+func GetSelectionPercent() int {
+	return getSelectionPercent
+}
+
+func MinGetSelection() int {
+	return minGetSelection
+}
+
+func MaxGetSelection() int {
+	return maxGetSelection
+}
+
+func MaxNewBucketsPerAddress() int {
+	return maxNewBucketsPerAddress
+}
+
+func NumRetries() int32 {
+	return numRetries
+}
+
+func MaxFailures() int32 {
+	return maxFailures
+}
+
+func NumMissingDays() time.Duration {
+	return numMissingDays
+}
+
+func MinBadDays() time.Duration {
+	return minBadDays
+}
+
+func DumpAddressInterval() time.Duration {
+	return dumpAddressInterval
+}
