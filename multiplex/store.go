@@ -19,29 +19,26 @@ var (
 	stateKey = []byte("stateKey")
 )
 
-type UserScopedStateStore struct {
-	UserAddress string
-	Scope       string
-	ScopeHash   string
+type ScopedStateStore struct {
+	ScopeHash string
 	sm.DBStore
 }
 
-type UserScopedBlockStore struct {
-	UserAddress string
-	Scope       string
-	ScopeHash   string
+type ScopedBlockStore struct {
+	ScopeHash string
 	*store.BlockStore
 }
 
-type MultiplexStateStore []UserScopedStateStore
-type MultiplexBlockStore []*UserScopedBlockStore
+// XXX multiplex objects should be: type xMultiplex map[string]*x
+type MultiplexStateStore []ScopedStateStore
+type MultiplexBlockStore []*ScopedBlockStore
 
 // LoadState loads the State from the database.
-func (store UserScopedStateStore) Load() (sm.State, error) {
+func (store ScopedStateStore) Load() (sm.State, error) {
 	return store.loadState(stateKey)
 }
 
-func (store UserScopedStateStore) loadState(key []byte) (state sm.State, err error) {
+func (store ScopedStateStore) loadState(key []byte) (state sm.State, err error) {
 	start := time.Now()
 	buf, err := store.GetDatabase().Get(key)
 	if err != nil {
@@ -70,21 +67,15 @@ func (store UserScopedStateStore) loadState(key []byte) (state sm.State, err err
 	return *sm, nil
 }
 
-// func (bs UserScopedBlockStore) GetStorePtr() *store.BlockStore {
-// 	return bs.BlockStore
-// }
-
 // ----------------------------------------------------------------------------
 // Factories
 
 // NewMultiplexStateStore creates multiple dbStores of the state pkg.
 func NewMultiplexStateStore(multiplex MultiplexDB, options sm.StoreOptions) (mStore MultiplexStateStore) {
 	for _, db := range multiplex {
-		mStore = append(mStore, UserScopedStateStore{
-			UserAddress: db.UserAddress,
-			Scope:       db.Scope,
-			ScopeHash:   db.ScopeHash,
-			DBStore:     sm.NewStore(db, options).(sm.DBStore),
+		mStore = append(mStore, ScopedStateStore{
+			ScopeHash: db.ScopeHash,
+			DBStore:   sm.NewStore(db, options).(sm.DBStore),
 		})
 	}
 
@@ -100,11 +91,9 @@ func NewMultiplexBlockStore(
 	//XXX multiplex block store should use *BlockStore
 	for _, db := range multiplex {
 		bs := store.NewBlockStore(db, options...)
-		mbStore = append(mbStore, &UserScopedBlockStore{
-			UserAddress: db.UserAddress,
-			Scope:       db.Scope,
-			ScopeHash:   db.ScopeHash,
-			BlockStore:  bs,
+		mbStore = append(mbStore, &ScopedBlockStore{
+			ScopeHash:  db.ScopeHash,
+			BlockStore: bs,
 		})
 	}
 
@@ -112,35 +101,35 @@ func NewMultiplexBlockStore(
 }
 
 // GetUserScopedState tries to find a state store in the multiplex using its scope hash
-func GetUserScopedStateStore(
+func GetScopedStateStore(
 	multiplex MultiplexStateStore,
 	userScopeHash string,
-) (UserScopedStateStore, error) {
+) (ScopedStateStore, error) {
 	scopeHash := []byte(userScopeHash)
 	if len(scopeHash) != sha256.Size {
-		return UserScopedStateStore{}, fmt.Errorf("incorrect scope hash for state store multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
+		return ScopedStateStore{}, fmt.Errorf("incorrect scope hash for state store multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
-	if idx := slices.IndexFunc(multiplex, func(dbs UserScopedStateStore) bool {
+	if idx := slices.IndexFunc(multiplex, func(dbs ScopedStateStore) bool {
 		return dbs.ScopeHash == userScopeHash
 	}); idx > -1 {
 		return multiplex[idx], nil
 	}
 
-	return UserScopedStateStore{}, fmt.Errorf("could not find state store in multiplex using scope hash %s", scopeHash)
+	return ScopedStateStore{}, fmt.Errorf("could not find state store in multiplex using scope hash %s", scopeHash)
 }
 
 // GetUserScopedBlock tries to find a block store in the multiplex using its scope hash
-func GetUserScopedBlockStore(
+func GetScopedBlockStore(
 	multiplex MultiplexBlockStore,
 	userScopeHash string,
-) (*UserScopedBlockStore, error) {
+) (*ScopedBlockStore, error) {
 	scopeHash := []byte(userScopeHash)
 	if len(scopeHash) != sha256.Size {
 		return nil, fmt.Errorf("incorrect scope hash for block store multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
-	if idx := slices.IndexFunc(multiplex, func(dbs *UserScopedBlockStore) bool {
+	if idx := slices.IndexFunc(multiplex, func(dbs *ScopedBlockStore) bool {
 		return dbs.ScopeHash == userScopeHash
 	}); idx > -1 {
 		return multiplex[idx], nil

@@ -7,22 +7,15 @@ import (
 	sm "github.com/cometbft/cometbft/state"
 )
 
-// type UserScopedBlockExecutor struct {
-// 	UserAddress string
-// 	Scope       string
-// 	ScopeHash   string
-// 	*sm.BlockExecutor
-// }
-
 // NewMultiplexBlockExecutor returns a new BlockExecutor with a NopEventBus.
 // Call SetEventBus to provide one.
 func NewMultiplexBlockExecutor(
-	stateStore *UserScopedStateStore,
+	stateStore *ScopedStateStore,
 	logger log.Logger,
 	proxyApp proxy.AppConnConsensus,
 	mempool mempool.Mempool,
 	evpool sm.EvidencePool,
-	blockStore *UserScopedBlockStore,
+	blockStore *ScopedBlockStore,
 	options ...sm.BlockExecutorOption,
 ) *sm.BlockExecutor {
 	res := sm.NewBlockExecutor(
@@ -34,13 +27,6 @@ func NewMultiplexBlockExecutor(
 		blockStore,
 		options...,
 	)
-
-	// res := &UserScopedBlockExecutor{
-	// 	UserAddress:   stateStore.UserAddress,
-	// 	Scope:         stateStore.Scope,
-	// 	ScopeHash:     stateStore.ScopeHash,
-	// 	BlockExecutor: be,
-	// }
 
 	for _, option := range options {
 		option(res)

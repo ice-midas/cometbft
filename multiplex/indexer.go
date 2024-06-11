@@ -27,7 +27,7 @@ func MultiplexIndexerFromConfigWithScope(
 ) (txindex.TxIndexer, indexer.BlockIndexer, error) {
 	switch cfg.TxIndex.Indexer {
 	case "kv":
-		store, err := GetUserScopedDB(txindexMultiplexDB, userScopeHash)
+		store, err := GetScopedDB(txindexMultiplexDB, userScopeHash)
 		if err != nil {
 			return nil, nil, err
 		}

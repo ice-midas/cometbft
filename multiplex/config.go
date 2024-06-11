@@ -9,53 +9,6 @@ import (
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 )
 
-// -----------------------------------------------------------------------------
-// scopeID
-// A private struct to deal with unique pairs of user address and scope.
-
-const (
-	fingerprintSize = 8
-)
-
-type scopeID struct {
-	ScopeHash string
-	string
-}
-
-func (s scopeID) Hash() (sum string) {
-	if len(s.ScopeHash) == 0 {
-		sum256 := tmhash.Sum([]byte(s.string))
-		s.ScopeHash = cmtbytes.HexBytes(sum256).String()
-	}
-
-	return s.ScopeHash
-}
-
-func (s scopeID) Fingerprint() (fp string) {
-	if len(s.ScopeHash) == 0 {
-		s.Hash()
-	}
-
-	hashBytes := cmtbytes.HexBytes([]byte(s.ScopeHash)[:fingerprintSize])
-	return hashBytes.String()
-}
-
-func (s scopeID) String() string {
-	return s.string
-}
-
-func NewScopeID(userAddress string, scope string) scopeID {
-	return scopeID{
-		string: fmt.Sprintf("%s:%s", userAddress, scope),
-	}
-}
-
-func NewScopeIDFromHash(scopeHash string) scopeID {
-	return scopeID{
-		ScopeHash: scopeHash,
-	}
-}
-
 type MultiplexUserConfig struct {
 	cfg.UserConfig
 
@@ -162,4 +115,51 @@ func TestPluralUserConfig(userScopes map[string][]string) MultiplexUserConfig {
 		configScopes,
 	)
 	return *cfg
+}
+
+// -----------------------------------------------------------------------------
+// scopeID
+// A private struct to deal with unique pairs of user address and scope.
+
+const (
+	fingerprintSize = 8
+)
+
+type scopeID struct {
+	ScopeHash string
+	string
+}
+
+func (s scopeID) Hash() (sum string) {
+	if len(s.ScopeHash) == 0 {
+		sum256 := tmhash.Sum([]byte(s.string))
+		s.ScopeHash = cmtbytes.HexBytes(sum256).String()
+	}
+
+	return s.ScopeHash
+}
+
+func (s scopeID) Fingerprint() (fp string) {
+	if len(s.ScopeHash) == 0 {
+		s.Hash()
+	}
+
+	hashBytes := cmtbytes.HexBytes([]byte(s.ScopeHash)[:fingerprintSize])
+	return hashBytes.String()
+}
+
+func (s scopeID) String() string {
+	return s.string
+}
+
+func NewScopeID(userAddress string, scope string) scopeID {
+	return scopeID{
+		string: fmt.Sprintf("%s:%s", userAddress, scope),
+	}
+}
+
+func NewScopeIDFromHash(scopeHash string) scopeID {
+	return scopeID{
+		ScopeHash: scopeHash,
+	}
 }

@@ -9,35 +9,23 @@ import (
 	cfg "github.com/cometbft/cometbft/config"
 )
 
-// MultiplexDBContext specifies config information for loading a new DB.
-type MultiplexDBContext struct {
+// ScopedDBContext specifies config information for loading a new DB.
+type ScopedDBContext struct {
 	cfg.DBContext
 	ScopeHash string
 }
 
-// UserScopedDB maps a dbm.DB to a pair of a user address and a scope
-type UserScopedDB struct {
-	UserAddress string
-	Scope       string
-	ScopeHash   string
+// ScopedDB maps a dbm.DB to a pair of a user address and a scope
+type ScopedDB struct {
+	ScopeHash string
 	dbm.DB
 }
 
-type MultiplexDB []UserScopedDB
-
-// GetScopeHash returns the ScopeHash value or generates it using scopeID
-func (usDB *UserScopedDB) GetScopeHash() string {
-	if len(usDB.ScopeHash) == 0 {
-		scopeId := NewScopeID(usDB.UserAddress, usDB.Scope)
-		usDB.ScopeHash = scopeId.Hash()
-	}
-
-	return usDB.ScopeHash
-}
+type MultiplexDB []ScopedDB
 
 // MultiplexDBProvider returns multiple databases using the DBBackend and DBDir
 // specified in the Config and uses two levels of subfolders for user and purpose.
-func MultiplexDBProvider(ctx *MultiplexDBContext) (multiplex MultiplexDB, err error) {
+func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 
 	// Storage is located in scopes subfolders per each user
@@ -51,15 +39,13 @@ func MultiplexDBProvider(ctx *MultiplexDBContext) (multiplex MultiplexDB, err er
 
 			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
 			if err != nil {
-				return []UserScopedDB{}, err
+				return []ScopedDB{}, err
 			}
 
 			scopeID := NewScopeID(userAddress, scope)
-			usDB := UserScopedDB{
-				UserAddress: userAddress,
-				Scope:       scope,
-				ScopeHash:   scopeID.Hash(),
-				DB:          userDb,
+			usDB := ScopedDB{
+				ScopeHash: scopeID.Hash(),
+				DB:        userDb,
 			}
 
 			multiplex = append(multiplex, usDB)
@@ -69,21 +55,21 @@ func MultiplexDBProvider(ctx *MultiplexDBContext) (multiplex MultiplexDB, err er
 	return multiplex, nil
 }
 
-// GetUserScopedDB tries to find a DB in the multiplex using its scope hash
-func GetUserScopedDB(
+// GetScopedDB tries to find a DB in the multiplex using its scope hash
+func GetScopedDB(
 	multiplex MultiplexDB,
 	userScopeHash string,
-) (usDB UserScopedDB, err error) {
+) (usDB ScopedDB, err error) {
 	scopeHash := []byte(userScopeHash)
 	if len(scopeHash) != sha256.Size {
-		return UserScopedDB{}, fmt.Errorf("incorrect scope hash for user scoped DB, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
+		return ScopedDB{}, fmt.Errorf("incorrect scope hash for user scoped DB, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
-	if idx := slices.IndexFunc(multiplex, func(db UserScopedDB) bool {
+	if idx := slices.IndexFunc(multiplex, func(db ScopedDB) bool {
 		return db.ScopeHash == userScopeHash
 	}); idx > -1 {
 		return multiplex[idx], nil
 	}
 
-	return UserScopedDB{}, fmt.Errorf("could not find user scoped DB using scope hash %s", scopeHash)
+	return ScopedDB{}, fmt.Errorf("could not find user scoped DB using scope hash %s", scopeHash)
 }
