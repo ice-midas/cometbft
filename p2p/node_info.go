@@ -22,6 +22,11 @@ func MaxNodeInfoSize() int {
 	return maxNodeInfoSize
 }
 
+// Max number of channels
+func MaxNumChannels() int {
+	return maxNumChannels
+}
+
 // -------------------------------------------------------------
 
 // NodeInfo exposes basic info of a node
