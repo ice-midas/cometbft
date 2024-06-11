@@ -575,6 +575,66 @@ func NewNodeWithCliParams(ctx context.Context,
 	return node, nil
 }
 
+func NewNodeWithServices(
+	config *cfg.Config,
+	genDoc *types.GenesisDoc,
+	privValidator types.PrivValidator,
+	nodeInfo p2p.NodeInfo,
+	nodeKey *p2p.NodeKey,
+	transport *p2p.MultiplexTransport,
+	sw *p2p.Switch,
+	eventBus *types.EventBus,
+	addrBook pex.AddrBook,
+	stateStore sm.Store,
+	blockStore *store.BlockStore,
+	pruner *sm.Pruner,
+	bcReactor p2p.Reactor,
+	mempoolReactor waitSyncP2PReactor,
+	mempool mempl.Mempool,
+	consensusState *cs.State,
+	consensusReactor *cs.Reactor,
+	stateSyncReactor *statesync.Reactor,
+	stateSync bool,
+	stateSyncGenesis sm.State,
+	pexReactor *pex.Reactor,
+	evidencePool *evidence.Pool,
+	proxyApp proxy.AppConns,
+	txIndexer txindex.TxIndexer,
+	indexerService *txindex.IndexerService,
+	blockIndexer indexer.BlockIndexer,
+) *Node {
+	return &Node{
+		config:        config,
+		genesisDoc:    genDoc,
+		privValidator: privValidator,
+
+		transport: transport,
+		sw:        sw,
+		addrBook:  addrBook,
+		nodeInfo:  nodeInfo,
+		nodeKey:   nodeKey,
+
+		stateStore:       stateStore,
+		blockStore:       blockStore,
+		pruner:           pruner,
+		bcReactor:        bcReactor,
+		mempoolReactor:   mempoolReactor,
+		mempool:          mempool,
+		consensusState:   consensusState,
+		consensusReactor: consensusReactor,
+		stateSyncReactor: stateSyncReactor,
+		stateSync:        stateSync,
+		stateSyncGenesis: stateSyncGenesis, // Shouldn't be necessary, but need a way to pass the genesis state
+		pexReactor:       pexReactor,
+		evidencePool:     evidencePool,
+		proxyApp:         proxyApp,
+		txIndexer:        txIndexer,
+		indexerService:   indexerService,
+		blockIndexer:     blockIndexer,
+		eventBus:         eventBus,
+	}
+}
+
 // OnStart starts the Node. It implements service.Service.
 func (n *Node) OnStart() error {
 	now := cmttime.Now()
