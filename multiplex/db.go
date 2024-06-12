@@ -3,24 +3,26 @@ package multiplex
 import (
 	"crypto/sha256"
 	"fmt"
+	"path/filepath"
 	"slices"
 
 	dbm "github.com/cometbft/cometbft-db"
 	cfg "github.com/cometbft/cometbft/config"
 )
 
-// ScopedDBContext specifies config information for loading a new DB.
+// ScopedDBContext embeds a cfg.DBContext and adds a scope hash
 type ScopedDBContext struct {
-	cfg.DBContext
 	ScopeHash string
+	cfg.DBContext
 }
 
-// ScopedDB maps a dbm.DB to a pair of a user address and a scope
+// ScopedDB embeds a dbm.DB and adds a scope hash
 type ScopedDB struct {
 	ScopeHash string
 	dbm.DB
 }
 
+// XXX multiplex objects should be: type xMultiplex map[string]*x
 type MultiplexDB []ScopedDB
 
 // MultiplexDBProvider returns multiple databases using the DBBackend and DBDir
@@ -28,14 +30,19 @@ type MultiplexDB []ScopedDB
 func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 
+	// XXX:
+	// It may make more sense to use the scope fingerprint as a subfolder
+	// for the database, including maybe a fingerprint of the user address.
+	// The current two-level fs is easiest for testing and investigations.
+
 	// Storage is located in scopes subfolders per each user
 	for _, userAddress := range ctx.Config.GetAddresses() {
 		// Uses one subfolder by user
-		dbStorage := fmt.Sprintf("%s/%s", ctx.Config.DBDir(), userAddress)
+		dbStorage := filepath.Join(ctx.Config.DBDir(), userAddress)
 
 		for _, scope := range ctx.Config.UserScopes[userAddress] {
 			// .. and one subfolder by scope
-			dbStorage += fmt.Sprintf("/%s", scope)
+			dbStorage += filepath.Join(dbStorage, scope)
 
 			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
 			if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 )
 
+// XXX naming convention change, Multiplex* should be used only for maps
 // MultiplexProtocolVersion contains a scope hash's protocol versions for the software.
 type MultiplexProtocolVersion struct {
 	ScopeHash string `json:"scope_hash"`
@@ -22,12 +23,14 @@ type MultiplexProtocolVersion struct {
 	App       uint64 `json:"app"`
 }
 
+// XXX naming convention change, Multiplex* should be used only for maps
 // MultiplexNetwork contains a scope network chainID
 type MultiplexNetwork struct {
 	ScopeHash string `json:"scope_hash"`
 	ChainID   string `json:"chain_id"`
 }
 
+// XXX naming convention change, Multiplex* should be used only for maps
 // MultiplexNodeInfo is a multiplex node information exchanged
 // between two peers during the CometBFT P2P handshake.
 type MultiplexNodeInfo struct {

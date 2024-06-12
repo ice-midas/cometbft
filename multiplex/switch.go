@@ -10,6 +10,7 @@ type ScopedSwitch struct {
 	*p2p.Switch
 }
 
+// XXX multiplex objects should be: type xMultiplex map[string]*x
 type SwitchMultiplex []*ScopedSwitch
 
 // NewSwitch creates a new Switch with the given config.
