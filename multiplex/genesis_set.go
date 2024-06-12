@@ -54,6 +54,11 @@ func (c *ChecksummedGenesisDocSet) GetChecksum() []byte {
 // UserScopedGenesisDoc defines a mapping with a composite key made of a user
 // address and an arbitrary string-typed scope, to the initial conditions
 // for CometBFT blockchains.
+//
+// XXX:
+// TBI whether UserAddress and Scope are necessary in genesis doc due to the
+// Config structs already including these, they may be skipped here if they
+// can be filled through configuration files otherwise.
 type UserScopedGenesisDoc struct {
 	UserAddress crypto.Address   `json:"user_address"`
 	Scope       string           `json:"scope"`
@@ -63,6 +68,7 @@ type UserScopedGenesisDoc struct {
 
 // GenesisDocSet defines the initial conditions for multiple CometBFT blockchains,
 // in particular their validator set and the mapping between a UserAddress and ChainID.
+// XXX would a multiplex object be more comfortable? take into account JSON format
 type GenesisDocSet struct {
 	GenesisDocs []UserScopedGenesisDoc
 }
