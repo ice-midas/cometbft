@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	cfg "github.com/cometbft/cometbft/config"
 	bc "github.com/cometbft/cometbft/internal/blocksync"
@@ -26,17 +25,17 @@ import (
 	"github.com/cometbft/cometbft/version"
 )
 
-// ReplicatedNodeServices stores pointers to resources that are bootstrapped
-// for **one replicated node**, i.e. the address book shall hold only entries
-// relevant to P2P communications of only one of the replicated blockchains.
-type ReplicatedNodeServices struct {
+// NodeServices stores pointers to resources that are bootstrapped for a
+// node instance connected to one replicated chain, e.g. the address book
+// holds entries relevant to P2P communications of one replicated blockchain.
+type NodeServices struct {
 	addrBook pex.AddrBook
 
 	// Handlers
 	sw           *p2p.Switch
 	eventBus     *types.EventBus
 	proxyApp     *proxy.AppConns
-	mempool      *mempl.Mempool
+	mempool      mempl.Mempool
 	evidencePool *evidence.Pool
 	pruner       *sm.Pruner
 
@@ -52,38 +51,22 @@ type ReplicatedNodeServices struct {
 	blockSync bool
 }
 
-// XXX naming convention: should be ScopedNode
-type ReplicatedChainNode struct {
+// ScopedNode embeds a Node instance and adds a scope hash
+type ScopedNode struct {
 	ScopeHash string
 	*node.Node
 }
 
-type NodeMultiplex struct {
+// NodeRegistry contains private node configuration such as the PrivValidator
+// and a Config instance, and a multiplex of bootstrapped node instances.
+type NodeRegistry struct {
 	config        *cfg.Config
 	privValidator *types.PrivValidator
 	nodeInfo      p2p.NodeInfo
 	nodeKey       *p2p.NodeKey // our node privkey
 
 	// TBI: keep Nodes or split functionality
-	Nodes map[string]*ReplicatedChainNode
-
-	WaitStateSync map[string]bool
-	WaitBlockSync map[string]bool
-
-	// XXX: every Node instance stores their own resources in memory
-	// such that the multiplex storage here is heavily redundant.
-	ChainStates     MultiplexState
-	StateStores     MultiplexStateStore
-	BlockStores     MultiplexBlockStore
-	AddressBooks    ScopedAddressBook
-	EventSwitches   SwitchMultiplex
-	EventBuses      map[string]*types.EventBus
-	ConsensusStates map[string]*cs.State
-	IndexerServices map[string]*txindex.IndexerService
-	AppConns        map[string]*proxy.AppConns
-	Mempools        map[string]*mempl.Mempool
-	EvidencePools   map[string]*evidence.Pool
-	Pruners         map[string]*sm.Pruner
+	Nodes MultiplexNode
 }
 
 // NewMultiplexNode returns a new, ready to go, multiplex CometBFT Node.
@@ -98,14 +81,18 @@ func NewMultiplexNode(ctx context.Context,
 	metricsProvider node.MetricsProvider,
 	logger log.Logger,
 	options ...node.Option,
-) (*NodeMultiplex, error) {
+) (*NodeRegistry, error) {
 	if config.BaseConfig.DBBackend == "boltdb" || config.BaseConfig.DBBackend == "cleveldb" {
 		logger.Info("WARNING: BoltDB and GoLevelDB are deprecated and will be removed in a future release. Please switch to a different backend.")
 	}
 
+	// ------------------------------------------------------------------------
+	// GLOBAL BOOTSTRAP
+
 	// Augment user configuration to multiplex capacity
 	mxUserConfig := NewUserConfig(config.Replication, config.UserScopes)
 
+	// Initialize database multiplex instances
 	blockStoreMultiplexDB,
 		stateMultiplexDB,
 		indexerMultiplexDB,
@@ -115,7 +102,13 @@ func NewMultiplexNode(ctx context.Context,
 		return nil, err
 	}
 
-	multiplexState, icsGenDoc, err := LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(stateMultiplexDB, genesisDocProvider, config.Storage.GenesisHash, config)
+	// Load initial state multiplex from database or from genesis docs
+	multiplexState, icsGenDoc, err := LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
+		stateMultiplexDB,
+		genesisDocProvider,
+		config.Storage.GenesisHash,
+		config,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +118,8 @@ func NewMultiplexNode(ctx context.Context,
 	globalMetricsProvider := GlobalMetricsProvider(config.Instrumentation)
 	smMetrics, bstMetrics, p2pMetrics := globalMetricsProvider("__global__")
 
-	multiplexStateStore := NewMultiplexStateStore(stateMultiplexDB, sm.StoreOptions{
+	// Load initial state store multiplex
+	multiplexStateStore := MultiplexStateStoreProvider(stateMultiplexDB, sm.StoreOptions{
 		DiscardABCIResponses: config.Storage.DiscardABCIResponses,
 		Metrics:              smMetrics,
 		Compact:              config.Storage.Compact,
@@ -134,7 +128,8 @@ func NewMultiplexNode(ctx context.Context,
 		DBKeyLayout:          config.Storage.ExperimentalKeyLayout,
 	})
 
-	multiplexBlockStore := NewMultiplexBlockStore(
+	// Load initial block store multiplex
+	multiplexBlockStore := MultiplexBlockStoreProvider(
 		blockStoreMultiplexDB,
 		store.WithMetrics(bstMetrics),
 		store.WithCompaction(config.Storage.Compact, config.Storage.CompactionInterval),
@@ -142,49 +137,40 @@ func NewMultiplexNode(ctx context.Context,
 		store.WithDBKeyLayout(config.Storage.ExperimentalKeyLayout),
 	)
 
-	// The key will be deleted if it existed.
-	// Not checking whether the key is there in case the genesis file was larger than
-	// the max size of a value (in rocksDB for example), which would cause the check
-	// to fail and prevent the node from booting.
-	logger.Info("WARNING: deleting genesis file from database if present, the database stores a hash of the original genesis file now")
+	// For each of the replicated chains, we store pointers to services during the
+	// lifetime of this function to be able to re-use objects while bootstrapping.
 
-	// For each of the replicated (user-scoped) chains, we store pointers to services
 	replicatedChainsScopeHashes := mxUserConfig.ScopeHashes()
 	numReplicatedChains := len(replicatedChainsScopeHashes)
-	multiplexEventBus := make(map[string]*types.EventBus, numReplicatedChains)
-	multiplexPruner := make(map[string]*sm.Pruner, numReplicatedChains)
-	multiplexTxIndexer := make(map[string]*txindex.TxIndexer, numReplicatedChains)
-	multiplexIndexer := make(map[string]*txindex.IndexerService, numReplicatedChains)
-	multiplexBlockIndexer := make(map[string]*indexer.BlockIndexer, numReplicatedChains)
-	multiplexAppConns := make(map[string]*proxy.AppConns, numReplicatedChains)
-	multiplexMempoolReactor := make(map[string]*mempl.Reactor, numReplicatedChains)
-	multiplexMempool := make(map[string]*mempl.Mempool, numReplicatedChains)
-	//multiplexPexReactor := make(map[string]*pex.Reactor, numReplicatedChains)
-	multiplexBlockSyncReactor := make(map[string]*p2p.Reactor, numReplicatedChains)
-	multiplexStateSyncReactor := make(map[string]*statesync.Reactor, numReplicatedChains)
-	multiplexConsensusReactor := make(map[string]*cs.Reactor, numReplicatedChains)
-	multiplexConsensusState := make(map[string]*cs.State, numReplicatedChains)
-	multiplexEvidenceReactor := make(map[string]*evidence.Reactor, numReplicatedChains)
-	multiplexEvidencePool := make(map[string]*evidence.Pool, numReplicatedChains)
-	stateSyncEnabledByScope := make(map[string]bool, numReplicatedChains)
-	blockSyncEnabledByScope := make(map[string]bool, numReplicatedChains)
+	stateSyncEnabledByScope := make(MultiplexFlag, numReplicatedChains)
+	blockSyncEnabledByScope := make(MultiplexFlag, numReplicatedChains)
+	multiplexEventBus := make(MultiplexEventBus, numReplicatedChains)
+	multiplexPruner := make(MultiplexPruner, numReplicatedChains)
+	multiplexIndexer := make(MultiplexIndexerService, numReplicatedChains)
+	multiplexAppConns := make(MultiplexAppConn, numReplicatedChains)
+	multiplexConsensusState := make(MultiplexConsensus, numReplicatedChains)
+	multiplexMempoolReactor := make(MultiplexMempoolReactor, numReplicatedChains)
+	multiplexBlockSyncReactor := make(MultiplexBlockSyncReactor, numReplicatedChains)
+	multiplexStateSyncReactor := make(MultiplexStateSyncReactor, numReplicatedChains)
+	multiplexConsensusReactor := make(MultiplexConsensusReactor, numReplicatedChains)
+	multiplexEvidenceReactor := make(MultiplexEvidenceReactor, numReplicatedChains)
 
-	// For each scope hash, we replicate state and block store, and create
-	// event bus, indexers and reactors.
+	multiplexMetricsProvider := MultiplexMetricsProvider(config.Instrumentation)
+
+	// For each scope hash, we replicate independent states and block stores, and
+	// create event bus, indexers and reactors.
 	for _, userScopeHash := range replicatedChainsScopeHashes {
+		scopeId := NewScopeIDFromHash(userScopeHash)
+		logger.With("scope", scopeId.Fingerprint())
+
 		// ------------------------------------------------------------------------
 		// ENVIRONMENT
-
-		multiplexMetricsProvider := MultiplexMetricsProvider(config.Instrumentation)
 
 		// Retrieve genesis doc for current scope hash
 		genDoc, err := icsGenDoc.GenesisDocByScope(userScopeHash)
 		if err != nil {
 			return nil, err
 		}
-
-		scopeId := NewScopeIDFromHash(userScopeHash)
-		logger.With("subchain", scopeId.Fingerprint())
 
 		// Initialize metrics with user scope hash
 		csMetrics,
@@ -195,7 +181,7 @@ func NewMultiplexNode(ctx context.Context,
 			ssMetrics := multiplexMetricsProvider(genDoc.ChainID, userScopeHash)
 
 		// Retrieve state database and state machine
-		stateDB, stateMachine, stateStore, blockStore, err := getReplicatedServices(
+		stateDB, stateMachine, stateStore, blockStore, err := GetScopedStateServices(
 			&stateMultiplexDB,
 			&multiplexState,
 			&multiplexStateStore,
@@ -205,6 +191,12 @@ func NewMultiplexNode(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
+
+		// The genesis doc key will be deleted if it existed.
+		// Not checking whether the key is there in case the genesis file was larger than
+		// the max size of a value (in rocksDB for example), which would cause the check
+		// to fail and prevent the node from booting.
+		logger.Info("WARNING: deleting genesis file from database if present, the database stores a hash of the original genesis file now")
 
 		err = stateDB.Delete(genesisDocKey)
 		if err != nil {
@@ -322,7 +314,7 @@ func NewMultiplexNode(ctx context.Context,
 		}
 
 		// make block executor for consensus and blocksync reactors to execute blocks
-		blockExec := sm.NewBlockExecutor(
+		blockExec := NewMultiplexBlockExecutor(
 			stateStore,
 			logger.With("module", "state"),
 			proxyApp.Consensus(),
@@ -374,25 +366,18 @@ func NewMultiplexNode(ctx context.Context,
 
 		multiplexPruner[userScopeHash] = pruner
 		multiplexEventBus[userScopeHash] = eventBus
-		multiplexTxIndexer[userScopeHash] = &txIndexer
 		multiplexIndexer[userScopeHash] = indexerService
-		multiplexBlockIndexer[userScopeHash] = &blockIndexer
 		multiplexAppConns[userScopeHash] = &proxyApp
 		multiplexMempoolReactor[userScopeHash] = mempoolReactor.(*mempl.Reactor)
-		multiplexMempool[userScopeHash] = &mempool
 		multiplexBlockSyncReactor[userScopeHash] = &bcReactor
 		multiplexStateSyncReactor[userScopeHash] = stateSyncReactor
 		multiplexConsensusReactor[userScopeHash] = consensusReactor
 		multiplexConsensusState[userScopeHash] = consensusState
 		multiplexEvidenceReactor[userScopeHash] = evidenceReactor
-		multiplexEvidencePool[userScopeHash] = evidencePool
 		stateSyncEnabledByScope[userScopeHash] = stateSync
 		blockSyncEnabledByScope[userScopeHash] = blockSync
 	}
 	// End of for loop, following code is run *globally*
-
-	// --------------------------------------------------------------------------
-	// GLOBAL NODE RESOURCES
 
 	// --------------------------------------------------------------------------
 	// P2P / TRANSPORT / SWITCH
@@ -470,7 +455,21 @@ func NewMultiplexNode(ctx context.Context,
 		addressBook.AddPrivateIDs(splitAndTrimEmpty(config.P2P.PrivatePeerIDs, ",", " "))
 	}
 
-	nodeMultiplex := &NodeMultiplex{
+	multiplexServices := &MultiplexServiceRegistry{
+		WaitStateSync: stateSyncEnabledByScope,
+		WaitBlockSync: blockSyncEnabledByScope,
+
+		// stores all multiplex resources in memory
+		AddressBooks:    addressBooks,
+		ChainStates:     multiplexState,
+		ConsensusStates: multiplexConsensusState,
+		IndexerServices: multiplexIndexer,
+		AppConns:        multiplexAppConns,
+		EventBuses:      multiplexEventBus,
+		EventSwitches:   switchMultiplex,
+	}
+
+	nodeMultiplex := &NodeRegistry{
 		config:        config,
 		privValidator: &privValidator,
 		nodeInfo:      nodeInfo,
@@ -478,28 +477,14 @@ func NewMultiplexNode(ctx context.Context,
 
 		// TODO: every Node instance stores their own resources in memory
 		// such that the multiplex storage in this struct is heavily redundant.
-		Nodes: make(map[string]*ReplicatedChainNode, len(replicatedChainsScopeHashes)),
-
-		WaitStateSync: stateSyncEnabledByScope,
-		WaitBlockSync: blockSyncEnabledByScope,
-
-		// stores all multiplex resources in memory
-		// TODO: benchmark and verify memory footprint
-		ChainStates:     multiplexState,
-		ConsensusStates: multiplexConsensusState,
-		IndexerServices: multiplexIndexer,
-		AppConns:        multiplexAppConns,
-		Mempools:        multiplexMempool,
-		EvidencePools:   multiplexEvidencePool,
-		EventBuses:      multiplexEventBus,
-		EventSwitches:   switchMultiplex,
+		Nodes: make(map[string]*ScopedNode, len(replicatedChainsScopeHashes)),
 	}
 
 	for _, userScopeHash := range replicatedChainsScopeHashes {
 		// Error can be skipped because it would have exited before
 		genDoc, _ := icsGenDoc.GenesisDocByScope(userScopeHash)
 
-		nodeServices, err := nodeMultiplex.getServices(userScopeHash)
+		nodeServices, err := multiplexServices.getServices(userScopeHash)
 		if err != nil {
 			return nil, fmt.Errorf("could not retrieve multiplex services with scope hash %s: %w", userScopeHash, err)
 		}
@@ -516,7 +501,7 @@ func NewMultiplexNode(ctx context.Context,
 			nodeServices.sw,
 			nodeServices.eventBus,
 			*nodeServices.proxyApp,
-			*nodeServices.mempool,
+			nodeServices.mempool,
 			nodeServices.evidencePool,
 			nodeServices.pruner,
 
@@ -535,118 +520,13 @@ func NewMultiplexNode(ctx context.Context,
 		}
 
 		// stores this node instance in the multiplex
-		nodeMultiplex.Nodes[userScopeHash] = &ReplicatedChainNode{
+		nodeMultiplex.Nodes[userScopeHash] = &ScopedNode{
 			ScopeHash: userScopeHash,
 			Node:      node,
 		}
 	}
 
 	return nodeMultiplex, nil
-}
-
-func (mx *NodeMultiplex) getServices(userScopeHash string) (*ReplicatedNodeServices, error) {
-
-	switchPos := slices.IndexFunc(mx.EventSwitches, func(sw *ScopedSwitch) bool {
-		return sw.ScopeHash == userScopeHash
-	})
-
-	statePos := slices.IndexFunc(mx.ChainStates, func(s ScopedState) bool {
-		return s.ScopeHash == userScopeHash
-	})
-
-	stateStorePos := slices.IndexFunc(mx.StateStores, func(ss ScopedStateStore) bool {
-		return ss.ScopeHash == userScopeHash
-	})
-
-	blockStorePos := slices.IndexFunc(mx.BlockStores, func(bs *ScopedBlockStore) bool {
-		return bs.ScopeHash == userScopeHash
-	})
-
-	if switchPos < 0 {
-		return nil, fmt.Errorf("could not find event switch with scope hash %s", userScopeHash)
-	}
-
-	if statePos < 0 {
-		return nil, fmt.Errorf("could not find state with scope hash %s", userScopeHash)
-	}
-
-	if stateStorePos < 0 {
-		return nil, fmt.Errorf("could not find state store with scope hash %s", userScopeHash)
-	}
-
-	if blockStorePos < 0 {
-		return nil, fmt.Errorf("could not find block store with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.AddressBooks[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find address book with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.IndexerServices[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find indexer services with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.ConsensusStates[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find consensus state with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.AppConns[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find proxy app conns with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.Mempools[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find mempool with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.EvidencePools[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find evidence pool with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.EventBuses[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find event bus with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.Pruners[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find pruner with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.WaitStateSync[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find statesync status with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.WaitBlockSync[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find blocksync status with scope hash %s", userScopeHash)
-	}
-
-	sw := mx.EventSwitches[switchPos]
-	addrBook := mx.AddressBooks[userScopeHash]
-	indexerService := mx.IndexerServices[userScopeHash]
-	consensusState := mx.ConsensusStates[userScopeHash]
-	proxyApp := mx.AppConns[userScopeHash]
-	mempool := mx.Mempools[userScopeHash]
-	evidencePool := mx.EvidencePools[userScopeHash]
-	eventBus := mx.EventBuses[userScopeHash]
-	pruner := mx.Pruners[userScopeHash]
-	stateStore := mx.StateStores[stateStorePos]
-	blockStore := mx.BlockStores[blockStorePos]
-	stateSync := mx.WaitStateSync[userScopeHash]
-	blockSync := mx.WaitBlockSync[userScopeHash]
-
-	return &ReplicatedNodeServices{
-		addrBook:       addrBook,
-		sw:             sw.Switch,
-		eventBus:       eventBus,
-		indexerService: indexerService,
-		consensusState: consensusState,
-		proxyApp:       proxyApp,
-		mempool:        mempool,
-		evidencePool:   evidencePool,
-		stateStore:     stateStore,
-		blockStore:     blockStore.BlockStore,
-		pruner:         pruner,
-		stateSync:      stateSync,
-		blockSync:      blockSync,
-	}, nil
 }
 
 // ----------------------------------------------------------------------------
@@ -657,33 +537,36 @@ func makeNodeInfo(
 	nodeKey *p2p.NodeKey,
 	genesisDocProvider node.GenesisDocProvider,
 	multiplexState MultiplexState,
-) (MultiplexNodeInfo, error) {
+) (MultiNetworkNodeInfo, error) {
 
 	numReplicatedChains := len(multiplexState)
-	protocolVersions := make([]MultiplexProtocolVersion, numReplicatedChains)
-	supportedNetworks := make([]MultiplexNetwork, numReplicatedChains)
+	protocolVersions := make([]ScopedProtocolVersion, numReplicatedChains)
+	supportedNetworks := make([]ScopedChainInfo, numReplicatedChains)
 
 	var icsGenDoc node.IChecksummedGenesisDoc
 	icsGenDoc, err := genesisDocProvider()
 	if err != nil {
-		return MultiplexNodeInfo{}, err
+		return MultiNetworkNodeInfo{}, err
 	}
 
 	// Fill ProtocolVersions and Networks fields
-	for i, userScopedState := range multiplexState {
+	i := 0
+	for userScopeHash, userScopedState := range multiplexState {
 		genDoc, _ := icsGenDoc.GenesisDocByScope(userScopedState.ScopeHash)
 
-		protocolVersions[i] = MultiplexProtocolVersion{
-			ScopeHash: userScopedState.ScopeHash,
-			P2P:       version.P2PProtocol, // global
+		protocolVersions[i] = ScopedProtocolVersion{
+			ScopeHash: userScopeHash,
+			P2P:       version.P2PProtocol,
 			Block:     userScopedState.Version.Consensus.Block,
 			App:       userScopedState.Version.Consensus.App,
 		}
 
-		supportedNetworks[i] = MultiplexNetwork{
-			ScopeHash: userScopedState.ScopeHash,
+		supportedNetworks[i] = ScopedChainInfo{
+			ScopeHash: userScopeHash,
 			ChainID:   genDoc.ChainID,
 		}
+
+		i++
 	}
 
 	// FIXME: txIndexer can be disabled but multiplex *always* enables it for now
@@ -692,7 +575,7 @@ func makeNodeInfo(
 	// 	txIndexerStatus = "off"
 	// }
 
-	nodeInfo := MultiplexNodeInfo{
+	nodeInfo := MultiNetworkNodeInfo{
 		ProtocolVersions: protocolVersions,
 		DefaultNodeID:    nodeKey.ID(),
 		Networks:         supportedNetworks,

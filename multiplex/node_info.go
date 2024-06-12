@@ -14,30 +14,27 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 )
 
-// XXX naming convention change, Multiplex* should be used only for maps
-// MultiplexProtocolVersion contains a scope hash's protocol versions for the software.
-type MultiplexProtocolVersion struct {
+// ScopedProtocolVersion contains a scope hash and protocol versions for the software.
+type ScopedProtocolVersion struct {
 	ScopeHash string `json:"scope_hash"`
 	P2P       uint64 `json:"p2p"`
 	Block     uint64 `json:"block"`
 	App       uint64 `json:"app"`
 }
 
-// XXX naming convention change, Multiplex* should be used only for maps
-// MultiplexNetwork contains a scope network chainID
-type MultiplexNetwork struct {
+// ScopedChainInfo contains a scope hash and a ChainID
+type ScopedChainInfo struct {
 	ScopeHash string `json:"scope_hash"`
 	ChainID   string `json:"chain_id"`
 }
 
-// XXX naming convention change, Multiplex* should be used only for maps
-// MultiplexNodeInfo is a multiplex node information exchanged
+// MultiNetworkNodeInfo is a multiplex node information exchanged
 // between two peers during the CometBFT P2P handshake.
-type MultiplexNodeInfo struct {
+type MultiNetworkNodeInfo struct {
 	// Replication configuration
-	Scopes           []string                   `json:"scopes"` // contains ScopeHash
-	ProtocolVersions []MultiplexProtocolVersion `json:"protocol_versions"`
-	Networks         []MultiplexNetwork         `json:"networks"` // contains chainID
+	Scopes           []string                `json:"scopes"` // contains ScopeHash
+	ProtocolVersions []ScopedProtocolVersion `json:"protocol_versions"`
+	Networks         []ScopedChainInfo       `json:"networks"` // contains chainID
 
 	// Authenticate
 	// TODO: replace with NetAddress
@@ -55,27 +52,18 @@ type MultiplexNodeInfo struct {
 }
 
 // ID returns the node's peer ID.
-func (info MultiplexNodeInfo) ID() p2p.ID {
+func (info MultiNetworkNodeInfo) ID() p2p.ID {
 	return info.DefaultNodeID
 }
 
-// Assert MultiplexNodeInfo satisfies NodeInfo.
-var _ p2p.NodeInfo = MultiplexNodeInfo{}
+// Assert MultiNetworkNodeInfo satisfies NodeInfo.
+var _ p2p.NodeInfo = MultiNetworkNodeInfo{}
 
-// Validate checks the self-reported DefaultNodeInfo is safe.
-// It returns an error if there
-// are too many Channels, if there are any duplicate Channels,
-// if the ListenAddr is malformed, or if the ListenAddr is a host name
-// that can not be resolved to some IP.
-// TODO: constraints for Moniker/Other? Or is that for the UI ?
-// JAE: It needs to be done on the client, but to prevent ambiguous
-// unicode characters, maybe it's worth sanitizing it here.
-// In the future we might want to validate these, once we have a
-// name-resolution system up.
-// International clients could then use punycode (or we could use
-// url-encoding), and we just need to be careful with how we handle that in our
-// clients. (e.g. off by default).
-func (info MultiplexNodeInfo) Validate() error {
+// Validate checks the self-reported MultiNetworkNodeInfo is safe.
+// It returns an error if there are too many Channels, if there are
+// any duplicate Channels, if the ListenAddr is malformed, or if the
+// ListenAddr is a host name that can not be resolved to some IP.
+func (info MultiNetworkNodeInfo) Validate() error {
 	// ID is already validated.
 
 	// Validate ListenAddr.
@@ -130,20 +118,20 @@ func (info MultiplexNodeInfo) Validate() error {
 // CompatibleWith checks if two DefaultNodeInfo are compatible with each other.
 // CONTRACT: two nodes are compatible if the Block version and network match
 // and they have at least one channel in common.
-func (info MultiplexNodeInfo) CompatibleWith(otherInfo p2p.NodeInfo) error {
-	other, ok := otherInfo.(MultiplexNodeInfo)
+func (info MultiNetworkNodeInfo) CompatibleWith(otherInfo p2p.NodeInfo) error {
+	other, ok := otherInfo.(MultiNetworkNodeInfo)
 	if !ok {
 		return fmt.Errorf("wrong NodeInfo type. Expected DefaultNodeInfo, got %v", reflect.TypeOf(otherInfo))
 	}
 
 	haveCommonReplicatedChain := false
 	for _, otherProtocolVersion := range other.ProtocolVersions {
-		versionPos := slices.IndexFunc(info.ProtocolVersions, func(v MultiplexProtocolVersion) bool {
-			return v.ScopeHash == otherProtocolVersion.ScopeHash
+		otherScopeHash := otherProtocolVersion.ScopeHash
+		versionPos := slices.IndexFunc(info.ProtocolVersions, func(v ScopedProtocolVersion) bool {
+			return v.ScopeHash == otherScopeHash
 		})
 
-		// Not having *all* the same replicated chains is allowed but does not
-		// count as making the node compatible with another
+		// Not having *all* the same replicated chains is allowed
 		if versionPos < 0 {
 			continue
 		}
@@ -155,25 +143,17 @@ func (info MultiplexNodeInfo) CompatibleWith(otherInfo p2p.NodeInfo) error {
 				localProtocolVersion.ScopeHash, otherProtocolVersion.Block, localProtocolVersion.Block)
 		}
 
-		haveCommonReplicatedChain = true
-	}
-
-	for _, otherNetwork := range other.Networks {
-		networkPos := slices.IndexFunc(info.ProtocolVersions, func(v MultiplexProtocolVersion) bool {
-			return v.ScopeHash == otherNetwork.ScopeHash
+		// Make sure we also have the network information such as ChainID
+		networkPos := slices.IndexFunc(info.Networks, func(v ScopedChainInfo) bool {
+			return v.ScopeHash == otherScopeHash
 		})
 
-		// Not having *all* the same replicated chains is allowed but does not
-		// count as making the node compatible with another
+		// Not having *all* the same replicated chains is allowed
 		if networkPos < 0 {
 			continue
 		}
 
-		localNetwork := info.Networks[networkPos]
-		if localNetwork != otherNetwork {
-			// nodes must be on the same network
-			return fmt.Errorf("peer is on a different network for scope hash %s. Got %v, expected %v", localNetwork.ScopeHash, otherNetwork, localNetwork)
-		}
+		haveCommonReplicatedChain = true
 	}
 
 	// nodes must share at least one replicated chain
@@ -203,20 +183,20 @@ OUTER_LOOP:
 	return nil
 }
 
-// NetAddress returns a NetAddress derived from the MultiplexNodeInfo -
+// NetAddress returns a NetAddress derived from the MultiNetworkNodeInfo -
 // it includes the authenticated peer ID and the self-reported
 // ListenAddr. Note that the ListenAddr is not authenticated and
 // may not match that address actually dialed if its an outbound peer.
-func (info MultiplexNodeInfo) NetAddress() (*p2p.NetAddress, error) {
+func (info MultiNetworkNodeInfo) NetAddress() (*p2p.NetAddress, error) {
 	idAddr := p2p.IDAddressString(info.ID(), info.ListenAddr)
 	return p2p.NewNetAddressString(idAddr)
 }
 
-func (info MultiplexNodeInfo) HasChannel(chID byte) bool {
+func (info MultiNetworkNodeInfo) HasChannel(chID byte) bool {
 	return bytes.Contains(info.Channels, []byte{chID})
 }
 
-func (info MultiplexNodeInfo) ToProto() *cmtmx.MultiplexNodeInfo {
+func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 
 	numReplicatedChains := len(info.Scopes)
 	numVersions := len(info.ProtocolVersions)
@@ -227,17 +207,17 @@ func (info MultiplexNodeInfo) ToProto() *cmtmx.MultiplexNodeInfo {
 		panic(fmt.Sprintf("number of replicated chains inconsistent with protocol versions and networks, Got %d versions, %d networks and %d scopes", numVersions, numNetworks, numReplicatedChains))
 	}
 
-	dni := new(cmtmx.MultiplexNodeInfo)
-	dni.ProtocolVersions = make([]*cmtmx.MultiplexProtocolVersion, numReplicatedChains)
-	dni.Networks = make([]*cmtmx.MultiplexNetwork, numReplicatedChains)
+	dni := new(cmtmx.MultiNetworkNodeInfo)
+	dni.ProtocolVersions = make([]*cmtmx.ScopedProtocolVersion, numReplicatedChains)
+	dni.Networks = make([]*cmtmx.ScopedChainInfo, numReplicatedChains)
 
 	for i, userScopeHash := range info.Scopes {
 
-		versionPos := slices.IndexFunc(info.ProtocolVersions, func(v MultiplexProtocolVersion) bool {
+		versionPos := slices.IndexFunc(info.ProtocolVersions, func(v ScopedProtocolVersion) bool {
 			return v.ScopeHash == userScopeHash
 		})
 
-		networkPos := slices.IndexFunc(info.Networks, func(n MultiplexNetwork) bool {
+		networkPos := slices.IndexFunc(info.Networks, func(n ScopedChainInfo) bool {
 			return n.ScopeHash == userScopeHash
 		})
 
@@ -249,7 +229,7 @@ func (info MultiplexNodeInfo) ToProto() *cmtmx.MultiplexNodeInfo {
 		protocolVersion := info.ProtocolVersions[versionPos]
 		network := info.Networks[networkPos]
 
-		dni.ProtocolVersions[i] = &cmtmx.MultiplexProtocolVersion{
+		dni.ProtocolVersions[i] = &cmtmx.ScopedProtocolVersion{
 			ScopeHash: userScopeHash,
 			ProtocolVersion: &tmp2p.ProtocolVersion{
 				P2P:   protocolVersion.P2P,
@@ -258,7 +238,7 @@ func (info MultiplexNodeInfo) ToProto() *cmtmx.MultiplexNodeInfo {
 			},
 		}
 
-		dni.Networks[i] = &cmtmx.MultiplexNetwork{
+		dni.Networks[i] = &cmtmx.ScopedChainInfo{
 			ScopeHash: userScopeHash,
 			ChainID:   network.ChainID,
 		}

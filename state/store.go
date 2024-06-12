@@ -197,7 +197,6 @@ func (dbs *dbStore) GetDatabase() dbm.DB {
 	return dbs.db
 }
 
->>>>>>> 1973448acc (feat(p2p): use p2p.Switch reactors, expose pools and indexers)
 func IsEmpty(store dbStore) (bool, error) {
 	state, err := store.Load()
 	if err != nil {
