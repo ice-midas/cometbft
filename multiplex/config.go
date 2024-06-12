@@ -9,6 +9,10 @@ import (
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 )
 
+// XXX naming convention change, Multiplex* should be used only for maps
+// MultiplexUserConfig embed UserConfig and computes SHA256 hashes
+// by pairing user addresses and individual scopes such that every
+// combination of user address and scope can be referred to by hash
 type MultiplexUserConfig struct {
 	cfg.UserConfig
 

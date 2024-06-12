@@ -31,6 +31,8 @@ type ScopedBlockStore struct {
 
 // XXX multiplex objects should be: type xMultiplex map[string]*x
 type MultiplexStateStore []ScopedStateStore
+
+// XXX multiplex objects should be: type xMultiplex map[string]*x
 type MultiplexBlockStore []*ScopedBlockStore
 
 // LoadState loads the State from the database.

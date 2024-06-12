@@ -156,6 +156,11 @@ type Store interface {
 	Close() error
 }
 
+// DBStore exports the database store implementation
+type DBStore struct {
+	dbStore
+}
+
 // dbStore wraps a db (github.com/cometbft/cometbft-db).
 type dbStore struct {
 	db dbm.DB
@@ -186,7 +191,13 @@ type StoreOptions struct {
 }
 
 var _ Store = (*dbStore)(nil)
+var _ Store = (*DBStore)(nil)
 
+func (dbs *dbStore) GetDatabase() dbm.DB {
+	return dbs.db
+}
+
+>>>>>>> 1973448acc (feat(p2p): use p2p.Switch reactors, expose pools and indexers)
 func IsEmpty(store dbStore) (bool, error) {
 	state, err := store.Load()
 	if err != nil {

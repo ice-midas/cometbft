@@ -380,7 +380,7 @@ func createMempoolAndMempoolReactor(
 	waitSync bool,
 	memplMetrics *mempl.Metrics,
 	logger log.Logger,
-) (mempl.Mempool, waitSyncP2PReactor) {
+) (mempl.Mempool, p2p.Reactor) {
 	switch config.Mempool.Type {
 	// allow empty string for backward compatibility
 	case cfg.MempoolTypeFlood, "":
@@ -572,7 +572,7 @@ func createSwitches(
 	p2pMetrics *p2p.Metrics,
 	peerFilters []p2p.PeerFilterFunc,
 	userScopeHashes []string,
-	multiplexMempoolReactor map[string]*waitSyncP2PReactor,
+	multiplexMempoolReactor map[string]*mempl.Reactor,
 	multiplexBlockSyncReactor map[string]*p2p.Reactor,
 	multiplexStateSyncReactor map[string]*statesync.Reactor,
 	multiplexConsensusReactor map[string]*cs.Reactor,
@@ -617,7 +617,7 @@ func createSwitches(
 				return SwitchMultiplex{}, fmt.Errorf("mempool reactor for scope hash %s not found", userScopeHash)
 			}
 
-			sw.AddReactor("MEMPOOL", *mempoolReactor)
+			sw.AddReactor("MEMPOOL", mempoolReactor)
 		}
 		sw.AddReactor("BLOCKSYNC", *blockSyncReactor)
 		sw.AddReactor("CONSENSUS", consensusReactor)

@@ -15,6 +15,7 @@ import (
 	"github.com/cometbft/cometbft/state/txindex/null"
 )
 
+// XXX naming convention: this method returns the scoped resource, hence GetScopedIndexer()
 // EventSinksFromConfig constructs a slice of indexer.EventSink using the provided
 // configuration.
 //
