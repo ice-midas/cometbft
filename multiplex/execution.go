@@ -7,8 +7,9 @@ import (
 	sm "github.com/cometbft/cometbft/state"
 )
 
-// NewMultiplexBlockExecutor returns a new BlockExecutor with a NopEventBus.
-// Call SetEventBus to provide one.
+// NewMultiplexBlockExecutor returns a new BlockExecutor with a NopEventBus
+// using ScopedStateStore and ScopedBlockStore instances.
+// Call SetEventBus to provide an event bus.
 func NewMultiplexBlockExecutor(
 	stateStore *ScopedStateStore,
 	logger log.Logger,
