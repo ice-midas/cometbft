@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	dbm "github.com/cometbft/cometbft-db"
 	cfg "github.com/cometbft/cometbft/config"
@@ -22,8 +21,8 @@ type ScopedDB struct {
 	dbm.DB
 }
 
-// XXX multiplex objects should be: type xMultiplex map[string]*x
-type MultiplexDB []ScopedDB
+// ----------------------------------------------------------------------------
+// Multiplex providers
 
 // MultiplexDBProvider returns multiple databases using the DBBackend and DBDir
 // specified in the Config and uses two levels of subfolders for user and purpose.
@@ -46,37 +45,39 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 
 			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
 			if err != nil {
-				return []ScopedDB{}, err
+				return nil, err
 			}
 
 			scopeID := NewScopeID(userAddress, scope)
-			usDB := ScopedDB{
-				ScopeHash: scopeID.Hash(),
+			scopeHash := scopeID.Hash()
+			usDB := &ScopedDB{
+				ScopeHash: scopeHash,
 				DB:        userDb,
 			}
 
-			multiplex = append(multiplex, usDB)
+			multiplex[scopeHash] = usDB
 		}
 	}
 
 	return multiplex, nil
 }
 
+// ----------------------------------------------------------------------------
+// Scoped instance getters
+
 // GetScopedDB tries to find a DB in the multiplex using its scope hash
 func GetScopedDB(
 	multiplex MultiplexDB,
 	userScopeHash string,
-) (usDB ScopedDB, err error) {
+) (usDB *ScopedDB, err error) {
 	scopeHash := []byte(userScopeHash)
 	if len(scopeHash) != sha256.Size {
-		return ScopedDB{}, fmt.Errorf("incorrect scope hash for user scoped DB, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
+		return nil, fmt.Errorf("incorrect scope hash for user scoped DB, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
-	if idx := slices.IndexFunc(multiplex, func(db ScopedDB) bool {
-		return db.ScopeHash == userScopeHash
-	}); idx > -1 {
-		return multiplex[idx], nil
+	if scopedDB, ok := multiplex[userScopeHash]; ok {
+		return scopedDB, nil
 	}
 
-	return ScopedDB{}, fmt.Errorf("could not find user scoped DB using scope hash %s", scopeHash)
+	return nil, fmt.Errorf("could not find user scoped DB using scope hash %s", scopeHash)
 }

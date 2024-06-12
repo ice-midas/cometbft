@@ -15,12 +15,17 @@ import (
 	"github.com/cometbft/cometbft/state/txindex/null"
 )
 
-// XXX naming convention: this method returns the scoped resource, hence GetScopedIndexer()
-// EventSinksFromConfig constructs a slice of indexer.EventSink using the provided
-// configuration.
+// ----------------------------------------------------------------------------
+// Scoped instance getters
+
+// GetScopedIndexer tries to find a db instance in the db multiplex using its scope hash
+// and creates instances for the TxIndexer and BlockIndexer.
 //
-//nolint:lll
-func MultiplexIndexerFromConfigWithScope(
+// XXX:
+// The scoped indexer functionality is compatible only with the `kv` indexer for now,
+// postgresql compatibility must be added. Appending the scope hash to the chainID
+// in the NewEventSink() call may be enough to allow multiple indexers instances.
+func GetScopedIndexer(
 	cfg *config.Config,
 	txindexMultiplexDB MultiplexDB,
 	chainID string,

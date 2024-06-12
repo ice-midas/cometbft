@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -35,54 +34,9 @@ import (
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/statesync"
-	"github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 )
-
-// SharedMetricsProvider returns a consensus, p2p and mempool Metrics.
-type SharedMetricsProvider func(chainID string) (
-	*sm.Metrics,
-	*store.Metrics,
-	*p2p.Metrics,
-)
-
-// ReplicatedMetricsProvider returns a consensus, p2p and mempool Metrics.
-type ReplicatedMetricsProvider func(chainID string, userScopeHash string) (
-	*cs.Metrics,
-	*mempl.Metrics,
-	*sm.Metrics,
-	*proxy.Metrics,
-	*blocksync.Metrics,
-	*statesync.Metrics,
-)
-
-func GlobalMetricsProvider(config *cfg.InstrumentationConfig) SharedMetricsProvider {
-	return func(chainID string) (*sm.Metrics, *store.Metrics, *p2p.Metrics) {
-		if config.Prometheus {
-			return sm.PrometheusMetrics(config.Namespace, "chain_id", chainID),
-				store.PrometheusMetrics(config.Namespace, "chain_id", chainID),
-				p2p.PrometheusMetrics(config.Namespace, "chain_id", chainID)
-		}
-		return sm.NopMetrics(), store.NopMetrics(), p2p.NopMetrics()
-	}
-}
-
-// MultiplexMetricsProvider returns Metrics build using Prometheus client library
-// if Prometheus is enabled. Otherwise, it returns no-op Metrics.
-func MultiplexMetricsProvider(config *cfg.InstrumentationConfig) ReplicatedMetricsProvider {
-	return func(chainID string, userScopeHash string) (*cs.Metrics, *mempl.Metrics, *sm.Metrics, *proxy.Metrics, *blocksync.Metrics, *statesync.Metrics) {
-		if config.Prometheus {
-			return cs.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash),
-				mempl.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash),
-				sm.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash),
-				proxy.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash),
-				blocksync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash),
-				statesync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "subchain", userScopeHash)
-		}
-		return cs.NopMetrics(), mempl.NopMetrics(), sm.NopMetrics(), proxy.NopMetrics(), blocksync.NopMetrics(), statesync.NopMetrics()
-	}
-}
 
 // PluralUserGenesisDocProviderFunc returns a GenesisDocProvider that loads
 // the GenesisDocSet from the config.GenesisFile() on the filesystem.
@@ -121,13 +75,21 @@ func PluralUserGenesisDocProviderFunc(config *cfg.Config) node.GenesisDocProvide
 }
 
 // ------------------------------------------------------------------------------
+// DATABASE
+//
 // Modified version of private database initializer to cope with the DB multiplex
 // The behaviour in SingularReplicationMode() returns solitary multiplex entries
 
 func initDBs(
 	config *cfg.Config,
 	dbProvider cfg.DBProvider,
-) (bsDBSet MultiplexDB, stateDBSet MultiplexDB, indexerDBSet MultiplexDB, evidenceDBSet MultiplexDB, err error) {
+) (
+	bsMultiplexDB MultiplexDB,
+	stateMultiplexDB MultiplexDB,
+	indexerMultiplexDB MultiplexDB,
+	evidenceMultiplexDB MultiplexDB,
+	err error,
+) {
 	// When replication is in plural mode, we will create one blockstore
 	// and one state database per each pair of user address and purpose
 	if config.Replication == cfg.PluralReplicationMode() {
@@ -151,34 +113,43 @@ func initDBs(
 		return nil, nil, nil, nil, err
 	}
 
-	bsDBSet = append(bsDBSet, ScopedDB{DB: bsDB})
-	stateDBSet = append(stateDBSet, ScopedDB{DB: stateDB})
-	return bsDBSet, stateDBSet, nil, nil, nil
+	bsMultiplexDB[""] = &ScopedDB{DB: bsDB}
+	stateMultiplexDB[""] = &ScopedDB{DB: stateDB}
+	return bsMultiplexDB, stateMultiplexDB, nil, nil, nil
 }
 
 func initMultiplexDBs(
 	config *cfg.Config,
-) (bsDBSet MultiplexDB, stateDBSet MultiplexDB, indexerDBSet MultiplexDB, evidenceDBSet MultiplexDB, err error) {
-	bsDBSet, _ = MultiplexDBProvider(&ScopedDBContext{
+) (
+	bsMultiplexDB MultiplexDB,
+	stateMultiplexDB MultiplexDB,
+	indexerMultiplexDB MultiplexDB,
+	evidenceMultiplexDB MultiplexDB,
+	err error,
+) {
+	bsMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "blockstore", Config: config},
 	})
 
-	stateDBSet, _ = MultiplexDBProvider(&ScopedDBContext{
+	stateMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "state", Config: config},
 	})
 
-	indexerDBSet, _ = MultiplexDBProvider(&ScopedDBContext{
+	indexerMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "tx_index", Config: config},
 	})
 
-	evidenceDBSet, _ = MultiplexDBProvider(&ScopedDBContext{
+	evidenceMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "evidence", Config: config},
 	})
 
-	return bsDBSet, stateDBSet, indexerDBSet, evidenceDBSet, nil
+	return bsMultiplexDB, stateMultiplexDB, indexerMultiplexDB, evidenceMultiplexDB, nil
 }
 
-func getReplicatedServices(
+// ----------------------------------------------------------------------------
+// Scoped instance getters
+
+func GetScopedStateServices(
 	stateMultiplexDB *MultiplexDB,
 	multiplexState *MultiplexState,
 	multiplexStateStore *MultiplexStateStore,
@@ -205,14 +176,14 @@ func getReplicatedServices(
 		return nil, nil, nil, nil, err
 	}
 
-	return &stateDB, &stateMachine, &stateStore, blockStore, nil
+	return stateDB, stateMachine, stateStore, blockStore, nil
 }
 
-func getReplicatedReactors(
-	multiplexBlockSyncReactor map[string]*p2p.Reactor,
-	multiplexStateSyncReactor map[string]*statesync.Reactor,
-	multiplexConsensusReactor map[string]*cs.Reactor,
-	multiplexEvidenceReactor map[string]*evidence.Reactor,
+func GetScopedReactors(
+	multiplexBlockSyncReactor MultiplexBlockSyncReactor,
+	multiplexStateSyncReactor MultiplexStateSyncReactor,
+	multiplexConsensusReactor MultiplexConsensusReactor,
+	multiplexEvidenceReactor MultiplexEvidenceReactor,
 	userScopeHash string,
 ) (*p2p.Reactor, *statesync.Reactor, *cs.Reactor, *evidence.Reactor, error) {
 	blockSyncReactor, ok := multiplexBlockSyncReactor[userScopeHash]
@@ -272,7 +243,7 @@ func createAndStartIndexerService(
 		blockIndexer indexer.BlockIndexer
 	)
 
-	txIndexer, blockIndexer, err := MultiplexIndexerFromConfigWithScope(config, indexerMultiplexDB, chainID, userScopeHash)
+	txIndexer, blockIndexer, err := GetScopedIndexer(config, indexerMultiplexDB, chainID, userScopeHash)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -580,16 +551,16 @@ func createSwitches(
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
 	p2pLogger log.Logger,
-) (SwitchMultiplex, error) {
+) (MultiplexSwitch, error) {
 
-	switchMultiplex := make([]*ScopedSwitch, len(userScopeHashes))
+	switchMultiplex := make(MultiplexSwitch, len(userScopeHashes))
 
-	for i, userScopeHash := range userScopeHashes {
+	for _, userScopeHash := range userScopeHashes {
 		blockSyncReactor,
 			stateSyncReactor,
 			consensusReactor,
 			evidenceReactor,
-			err := getReplicatedReactors(
+			err := GetScopedReactors(
 			multiplexBlockSyncReactor,
 			multiplexStateSyncReactor,
 			multiplexConsensusReactor,
@@ -599,7 +570,7 @@ func createSwitches(
 
 		// missing reactors not allowed
 		if err != nil {
-			return SwitchMultiplex{}, err
+			return nil, err
 		}
 
 		sw := NewScopedSwitch(
@@ -614,7 +585,7 @@ func createSwitches(
 		if config.Mempool.Type != cfg.MempoolTypeNop {
 			mempoolReactor, ok := multiplexMempoolReactor[userScopeHash]
 			if !ok {
-				return SwitchMultiplex{}, fmt.Errorf("mempool reactor for scope hash %s not found", userScopeHash)
+				return nil, fmt.Errorf("mempool reactor for scope hash %s not found", userScopeHash)
 			}
 
 			sw.AddReactor("MEMPOOL", mempoolReactor)
@@ -630,18 +601,18 @@ func createSwitches(
 		if len(config.P2P.PersistentPeers) > 0 {
 			err = sw.AddPersistentPeers(splitAndTrimEmpty(config.P2P.PersistentPeers, ",", " "))
 			if err != nil {
-				return SwitchMultiplex{}, fmt.Errorf("could not add peers from persistent_peers field: %w", err)
+				return nil, fmt.Errorf("could not add peers from persistent_peers field: %w", err)
 			}
 		}
 
 		if len(config.P2P.UnconditionalPeerIDs) > 0 {
 			err = sw.AddUnconditionalPeerIDs(splitAndTrimEmpty(config.P2P.UnconditionalPeerIDs, ",", " "))
 			if err != nil {
-				return SwitchMultiplex{}, fmt.Errorf("could not add peer ids from unconditional_peer_ids field: %w", err)
+				return nil, fmt.Errorf("could not add peer ids from unconditional_peer_ids field: %w", err)
 			}
 		}
 
-		switchMultiplex[i] = sw
+		switchMultiplex[userScopeHash] = sw
 	}
 
 	p2pLogger.Info("P2P Node ID", "ID", nodeKey.ID(), "file", config.NodeKeyFile())
@@ -651,17 +622,13 @@ func createSwitches(
 func createAddressBooksAndSetOnSwitches(
 	config *cfg.Config,
 	userScopeHashes []string,
-	switchMultiplex SwitchMultiplex,
+	switchMultiplex MultiplexSwitch,
 	p2pLogger log.Logger,
 	nodeKey *p2p.NodeKey,
-) (AddressBookMultiplex, error) {
-	addressBookMultiplex := make(AddressBookMultiplex, len(userScopeHashes))
+) (MultiplexAddressBook, error) {
+	addressBookMultiplex := make(MultiplexAddressBook, len(userScopeHashes))
 	for _, userScopeHash := range userScopeHashes {
-		switchPos := slices.IndexFunc(switchMultiplex, func(sw *ScopedSwitch) bool {
-			return sw.ScopeHash == userScopeHash
-		})
-
-		if switchPos < 0 {
+		if _, ok := switchMultiplex[userScopeHash]; !ok {
 			return nil, fmt.Errorf("could not find switch in multiplex with scope hash %s", userScopeHash)
 		}
 
@@ -672,7 +639,7 @@ func createAddressBooksAndSetOnSwitches(
 			return nil, err
 		}
 
-		addrBook := NewScopedAddressBook(addrBookFile, config.P2P.AddrBookStrict, userScopeHash)
+		addrBook := pex.NewAddrBook(addrBookFile, config.P2P.AddrBookStrict)
 		addrBook.SetLogger(p2pLogger.With("book", addrBookFile))
 
 		// Add ourselves to addrbook to prevent dialing ourselves
@@ -691,7 +658,7 @@ func createAddressBooksAndSetOnSwitches(
 			addrBook.AddOurAddress(addr)
 		}
 
-		sw := switchMultiplex[switchPos]
+		sw := switchMultiplex[userScopeHash]
 		sw.SetAddrBook(addrBook)
 		addressBookMultiplex[userScopeHash] = addrBook
 	}
@@ -701,18 +668,14 @@ func createAddressBooksAndSetOnSwitches(
 
 func createPEXReactorsAndAddToSwitches(
 	userScopeHashes []string,
-	addressBookMultiplex AddressBookMultiplex,
+	addressBookMultiplex MultiplexAddressBook,
 	config *cfg.Config,
-	switchMultiplex SwitchMultiplex,
+	switchMultiplex MultiplexSwitch,
 	logger log.Logger,
 ) (map[string]*pex.Reactor, error) {
 	pexReactors := make(map[string]*pex.Reactor, len(userScopeHashes))
 	for _, userScopeHash := range userScopeHashes {
-		switchPos := slices.IndexFunc(switchMultiplex, func(sw *ScopedSwitch) bool {
-			return sw.ScopeHash == userScopeHash
-		})
-
-		if switchPos < 0 {
+		if _, ok := switchMultiplex[userScopeHash]; !ok {
 			return nil, fmt.Errorf("could not find switch in multiplex with scope hash %s", userScopeHash)
 		}
 
@@ -736,7 +699,7 @@ func createPEXReactorsAndAddToSwitches(
 			})
 		pexReactor.SetLogger(logger.With("module", "pex"))
 
-		sw := switchMultiplex[switchPos]
+		sw := switchMultiplex[userScopeHash]
 		sw.AddReactor("PEX", pexReactor)
 
 		pexReactors[userScopeHash] = pexReactor
@@ -793,6 +756,9 @@ var (
 	genesisDocHashKey = []byte("mxGenesisDocHash")
 )
 
+// LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig load a state multiplex
+// using a database multiplex and a genesis doc provider. This factory adds one
+// or many state instances in the resulting state multiplex.
 func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	stateMultiplexDB MultiplexDB,
 	genesisDocProvider node.GenesisDocProvider,
@@ -807,6 +773,7 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	mxConfig := NewUserConfig(config.Replication, config.UserScopes)
 	replicatedChains := mxConfig.ScopeHashes()
 	numReplicatedChains := len(replicatedChains)
+	multiplexState = make(MultiplexState, numReplicatedChains)
 
 	// Validate plural genesis configuration
 	// Then get genesis doc set hashes from dbs or update
@@ -881,10 +848,10 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 			return MultiplexState{}, nil, err
 		}
 
-		multiplexState = append(multiplexState, ScopedState{
+		multiplexState[userScopeHash] = &ScopedState{
 			ScopeHash: userScopeHash,
 			State:     userState,
-		})
+		}
 	}
 
 	numGenDocSetHashes := len(genDocSetHashes)

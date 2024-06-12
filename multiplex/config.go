@@ -10,7 +10,7 @@ import (
 )
 
 // XXX naming convention change, Multiplex* should be used only for maps
-// MultiplexUserConfig embed UserConfig and computes SHA256 hashes
+// MultiplexUserConfig embeds UserConfig and computes SHA256 hashes
 // by pairing user addresses and individual scopes such that every
 // combination of user address and scope can be referred to by hash
 type MultiplexUserConfig struct {
@@ -129,6 +129,7 @@ const (
 	fingerprintSize = 8
 )
 
+// scopeID embeds a string and adds a scope hash
 type scopeID struct {
 	ScopeHash string
 	string
