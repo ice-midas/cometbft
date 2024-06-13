@@ -10,7 +10,14 @@ import (
 	cmttest "github.com/cometbft/cometbft/internal/test"
 )
 
-func ResetTestRootWithChainIDAndUser(testName string, chainID string, userAddress string) *config.Config {
+func ResetTestRootMultiplex(testName string) *config.Config {
+	return ResetTestRootMultiplexWithChainID(testName, "")
+}
+
+func ResetTestRootMultiplexWithChainID(
+	testName string,
+	chainID string,
+) *config.Config {
 	// Initialize PrivValidator using cmttest
 	conf := cmttest.ResetTestRootWithChainID(testName, chainID)
 
@@ -31,6 +38,27 @@ func ResetTestRootWithChainIDAndUser(testName string, chainID string, userAddres
 		cmtos.MustWriteFile(genesisFilePath, []byte(testGenesis), 0o644)
 	}
 
+	return conf
+}
+
+func ResetTestRootMultiplexWithChainIDAndScopes(
+	testName string,
+	chainID string,
+	userScopes map[string][]string,
+) *config.Config {
+	conf := cmttest.ResetTestRootWithChainID(testName, chainID)
+	baseConfig := config.MultiplexBaseConfig(
+		config.PluralReplicationMode(),
+		userScopes,
+	)
+
+	// XXX:
+	// This is not optimal as it is possible that undesired config will
+	// be overwritten ; at best we should replace the EnsureRoot call
+	// completely with this one. This solution is for further compat.
+	config.EnsureRootMultiplex(conf.RootDir, &baseConfig)
+
+	conf.UserConfig = baseConfig.UserConfig
 	return conf
 }
 
