@@ -49,6 +49,21 @@ func EnsureRoot(rootDir string) {
 	}
 }
 
+// EnsureRootMultiplex creates the scoped data directories if they don't exist,
+// and panics if it fails.
+func EnsureRootMultiplex(rootDir string, config *BaseConfig) {
+	// Storage is located in scopes subfolders per each user
+	for _, userAddress := range config.GetAddresses() {
+		for _, scope := range config.UserScopes[userAddress] {
+			// Uses one subfolder by user and one subfolder by scope
+			scopedPath := filepath.Join(rootDir, DefaultDataDir, userAddress, scope)
+			if err := cmtos.EnsureDir(scopedPath, DefaultDirPerm); err != nil {
+				panic(err.Error())
+			}
+		}
+	}
+}
+
 // XXX: this func should probably be called by cmd/cometbft/commands/init.go
 // alongside the writing of the genesis.json and priv_validator.json.
 func writeDefaultConfigFile(configFilePath string) {
