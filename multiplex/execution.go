@@ -7,6 +7,9 @@ import (
 	sm "github.com/cometbft/cometbft/state"
 )
 
+// ----------------------------------------------------------------------------
+// Builders
+
 // NewMultiplexBlockExecutor returns a new BlockExecutor with a NopEventBus
 // using ScopedStateStore and ScopedBlockStore instances.
 // Call SetEventBus to provide an event bus.

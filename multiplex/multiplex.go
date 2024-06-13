@@ -14,6 +14,12 @@ import (
 )
 
 // ----------------------------------------------------------------------------
+// FILESYSTEM
+
+// MultiplexFS maps scope hashes to filesystem paths (data/...)
+type MultiplexFS map[string]string
+
+// ----------------------------------------------------------------------------
 // DATABASE
 
 // MultiplexDB maps scope hashes to database instances
