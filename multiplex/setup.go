@@ -91,7 +91,7 @@ func initDBs(
 	err error,
 ) {
 	// When replication is in plural mode, we will create one blockstore
-	// and one state database per each pair of user address and purpose
+	// and one state database per each pair of user address and scope
 	if config.Replication == cfg.PluralReplicationMode() {
 		// Initialize many databases
 		return initMultiplexDBs(config)
@@ -113,8 +113,8 @@ func initDBs(
 		return nil, nil, nil, nil, err
 	}
 
-	bsMultiplexDB[""] = &ScopedDB{DB: bsDB}
-	stateMultiplexDB[""] = &ScopedDB{DB: stateDB}
+	bsMultiplexDB = MultiplexDB{"": &ScopedDB{DB: bsDB}}
+	stateMultiplexDB = MultiplexDB{"": &ScopedDB{DB: stateDB}}
 	return bsMultiplexDB, stateMultiplexDB, nil, nil, nil
 }
 
@@ -144,6 +144,20 @@ func initMultiplexDBs(
 	})
 
 	return bsMultiplexDB, stateMultiplexDB, indexerMultiplexDB, evidenceMultiplexDB, nil
+}
+
+// ----------------------------------------------------------------------------
+// STORAGE
+
+func initDataDir(config *cfg.Config) error {
+	// MultiplexFSProvider creates an instances of MultiplexFS and checks folders.
+	// Note: the filesystem folders are created in EnsureRootMultiplex()
+	_, err := MultiplexFSProvider(config)
+	if err != nil {
+		return fmt.Errorf("could not create multiplex fs structure: %w", err)
+	}
+
+	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -771,7 +785,7 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	}
 
 	mxConfig := NewUserConfig(config.Replication, config.UserScopes)
-	replicatedChains := mxConfig.ScopeHashes()
+	replicatedChains := mxConfig.GetScopeHashes()
 	numReplicatedChains := len(replicatedChains)
 	multiplexState = make(MultiplexState, numReplicatedChains)
 
@@ -780,7 +794,7 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	// FIXME: currently saves GenesisDocSet SHA256 in *all* state DBs, instead
 	// it should save each GenesisDoc's SHA256 in the corresponding DB.
 	var genDocSetHashes [][]byte
-	for _, userScopeHash := range mxConfig.ScopeHashes() {
+	for _, userScopeHash := range replicatedChains {
 		csGenDoc, err := icsGenDoc.GenesisDocByScope(userScopeHash)
 		if err != nil {
 			return MultiplexState{}, nil, fmt.Errorf(

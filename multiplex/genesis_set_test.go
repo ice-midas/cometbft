@@ -15,7 +15,7 @@ import (
 	cmttime "github.com/cometbft/cometbft/types/time"
 )
 
-func TestGenesisDocSetBad(t *testing.T) {
+func TestMultiplexGenesisDocSetBad(t *testing.T) {
 	// test some bad ones from raw json
 	testCases := [][]byte{
 		{},               // empty
@@ -47,7 +47,7 @@ func TestGenesisDocSetBad(t *testing.T) {
 	}
 }
 
-func TestGenesisDocSetGood(t *testing.T) {
+func TestMultiplexGenesisDocSetGood(t *testing.T) {
 	// test one genesis doc by raw json
 	genDocSetBytes := []byte(`[
 		{
@@ -179,7 +179,7 @@ func TestGenesisDocSetGood(t *testing.T) {
 	assert.NoError(t, err, "expected no error from random correct genDocSet struct")
 }
 
-func TestGenesisDocSetSaveAs(t *testing.T) {
+func TestMultiplexGenesisDocSetSaveAs(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "genesis")
 	require.NoError(t, err)
 	defer os.Remove(tmpfile.Name())
@@ -205,12 +205,12 @@ func TestGenesisDocSetSaveAs(t *testing.T) {
 	assert.Equal(t, genDocSet2.GenesisDocs, genDocSet.GenesisDocs)
 }
 
-func TestGenesisDocSetValidatorHash(t *testing.T) {
+func TestMultiplexGenesisDocSetValidatorHash(t *testing.T) {
 	genDocSet := randomGenesisDocSet()
 	assert.NotEmpty(t, genDocSet.ValidatorHash())
 }
 
-func TestGenesisDocSetSearchGenesisDocByUser(t *testing.T) {
+func TestMultiplexGenesisDocSetSearchGenesisDocByUser(t *testing.T) {
 	// defines a correct genesis doc
 	genDocSetFmt := `[
 		{

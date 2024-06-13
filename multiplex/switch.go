@@ -11,6 +11,9 @@ type ScopedSwitch struct {
 	*p2p.Switch
 }
 
+// ----------------------------------------------------------------------------
+// Builders
+
 // NewScopedStateStore creates a new Switch with the given config and scope hash.
 func NewScopedSwitch(
 	cfg *config.P2PConfig,

@@ -25,7 +25,7 @@ type ScopedDB struct {
 // Multiplex providers
 
 // MultiplexDBProvider returns multiple databases using the DBBackend and DBDir
-// specified in the Config and uses two levels of subfolders for user and purpose.
+// specified in the Config and uses two levels of subfolders for user and scope.
 func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 
@@ -33,6 +33,7 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 	// It may make more sense to use the scope fingerprint as a subfolder
 	// for the database, including maybe a fingerprint of the user address.
 	// The current two-level fs is easiest for testing and investigations.
+	multiplex = MultiplexDB{}
 
 	// Storage is located in scopes subfolders per each user
 	for _, userAddress := range ctx.Config.GetAddresses() {
@@ -41,7 +42,7 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 
 		for _, scope := range ctx.Config.UserScopes[userAddress] {
 			// .. and one subfolder by scope
-			dbStorage += filepath.Join(dbStorage, scope)
+			dbStorage = filepath.Join(dbStorage, scope)
 
 			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
 			if err != nil {

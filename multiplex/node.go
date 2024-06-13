@@ -82,6 +82,44 @@ func NewMultiplexNode(ctx context.Context,
 	logger log.Logger,
 	options ...node.Option,
 ) (*NodeRegistry, error) {
+	// Fallback to legacy node implementation as soon as possible
+	// The returned NodeRegistry contains only one entry and the
+	// node implementation used is `node/node.go`, i.e. no multiplex.
+	if config.Replication == cfg.SingularReplicationMode() {
+		readyNode, err := node.NewNode(
+			ctx,
+			config,
+			privValidator,
+			nodeKey,
+			clientCreator,
+			genesisDocProvider,
+			dbProvider,
+			metricsProvider,
+			logger,
+			options...,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return &NodeRegistry{
+			config:        config,
+			privValidator: &privValidator,
+			nodeInfo:      readyNode.NodeInfo(),
+			nodeKey:       nodeKey,
+			Nodes: MultiplexNode{"": &ScopedNode{
+				ScopeHash: "",
+				Node:      readyNode,
+			}},
+		}, nil
+	}
+
+	// CAUTION - EXPERIMENTAL:
+	// Initializing a Multiplex Node
+	// Running the following code is highly unrecommended in
+	// a production environment. Please use this feature with
+	// caution as it is still being actively researched.
+
 	if config.BaseConfig.DBBackend == "boltdb" || config.BaseConfig.DBBackend == "cleveldb" {
 		logger.Info("WARNING: BoltDB and GoLevelDB are deprecated and will be removed in a future release. Please switch to a different backend.")
 	}
@@ -91,6 +129,12 @@ func NewMultiplexNode(ctx context.Context,
 
 	// Augment user configuration to multiplex capacity
 	mxUserConfig := NewUserConfig(config.Replication, config.UserScopes)
+
+	// Initialize filesystem directory structure
+	err := initDataDir(config)
+	if err != nil {
+		return nil, err
+	}
 
 	// Initialize database multiplex instances
 	blockStoreMultiplexDB,
@@ -140,7 +184,7 @@ func NewMultiplexNode(ctx context.Context,
 	// For each of the replicated chains, we store pointers to services during the
 	// lifetime of this function to be able to re-use objects while bootstrapping.
 
-	replicatedChainsScopeHashes := mxUserConfig.ScopeHashes()
+	replicatedChainsScopeHashes := mxUserConfig.GetScopeHashes()
 	numReplicatedChains := len(replicatedChainsScopeHashes)
 	stateSyncEnabledByScope := make(MultiplexFlag, numReplicatedChains)
 	blockSyncEnabledByScope := make(MultiplexFlag, numReplicatedChains)

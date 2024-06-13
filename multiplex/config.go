@@ -3,17 +3,18 @@ package multiplex
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"time"
 
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 )
 
-// XXX naming convention change, Multiplex* should be used only for maps
-// MultiplexUserConfig embeds UserConfig and computes SHA256 hashes
+// ScopedUserConfig embeds UserConfig and computes SHA256 hashes
 // by pairing user addresses and individual scopes such that every
 // combination of user address and scope can be referred to by hash
-type MultiplexUserConfig struct {
+type ScopedUserConfig struct {
 	cfg.UserConfig
 
 	// userAddresses contains addresses (20 bytes hex) by which state is replicated.
@@ -26,7 +27,10 @@ type MultiplexUserConfig struct {
 	userScopeHashes map[string][]string
 }
 
-func (c *MultiplexUserConfig) computeUserScopeHashes() error {
+// computeUserScopeHashes computes computes SHA256 hashes by pairing user
+// addresses and individual scopes (separated by `:`) such that every
+// combination of user address and scope can be referred to by hash
+func (c *ScopedUserConfig) computeUserScopeHashes() error {
 	if c.Replication == cfg.SingularReplicationMode() {
 		return nil
 	}
@@ -51,15 +55,8 @@ func (c *MultiplexUserConfig) computeUserScopeHashes() error {
 	return nil
 }
 
-func (c *MultiplexUserConfig) ScopeHashesByUser(userAddress string) []string {
-	if hashes, ok := c.userScopeHashes[userAddress]; ok {
-		return hashes
-	}
-
-	return []string{}
-}
-
-func (c *MultiplexUserConfig) ScopeHashes() []string {
+// GetScopeHashes returns a slice of the flattened user scope hashes
+func (c *ScopedUserConfig) GetScopeHashes() []string {
 	var allHashes []string
 	for _, scopeHashes := range c.userScopeHashes {
 		allHashes = append(allHashes, scopeHashes...)
@@ -68,40 +65,72 @@ func (c *MultiplexUserConfig) ScopeHashes() []string {
 	return allHashes
 }
 
-// NewUserConfig returns a new pointer to a MultiplexUserConfig object.
+// ----------------------------------------------------------------------------
+// Builders
+
+// NewUserConfig returns a new pointer to a ScopedUserConfig object.
 func NewUserConfig(
 	repl cfg.DataReplicationConfig,
 	userScopes map[string][]string,
-) *MultiplexUserConfig {
-	cfg := &MultiplexUserConfig{
+) *ScopedUserConfig {
+	config := &ScopedUserConfig{
 		UserConfig: cfg.UserConfig{
-			Replication: repl,
+			Replication: cfg.PluralReplicationMode(),
 			UserScopes:  userScopes,
 		},
 	}
 
-	cfg.computeUserScopeHashes()
-	return cfg
+	config.computeUserScopeHashes()
+	return config
 }
 
-// PluralUserConfig returns a plural replication configuration for a CometBFT node.
-func PluralUserConfig() MultiplexUserConfig {
-	cfg := NewUserConfig(
+// NewScopedUserConfig returns a scoped configuration for UserConfig.
+func NewScopedUserConfig(userScopes map[string][]string) *ScopedUserConfig {
+	config := NewUserConfig(
 		cfg.PluralReplicationMode(),
-		map[string][]string{}, // empty scopes
+		userScopes,
 	)
-	return *cfg
+	return config
 }
+
+// NewConsensusConfigWithWalFile returns configuration for the consensus service
+// with a custom wal file path.
+func NewConsensusConfigWithWalFile(walFile string) *cfg.ConsensusConfig {
+	if len(walFile) == 0 {
+		walFile = filepath.Join(cfg.DefaultDataDir, "cs.wal", "wal")
+	}
+
+	return &cfg.ConsensusConfig{
+		WalPath:                          walFile,
+		TimeoutPropose:                   3000 * time.Millisecond,
+		TimeoutProposeDelta:              500 * time.Millisecond,
+		TimeoutPrevote:                   1000 * time.Millisecond,
+		TimeoutPrevoteDelta:              500 * time.Millisecond,
+		TimeoutPrecommit:                 1000 * time.Millisecond,
+		TimeoutPrecommitDelta:            500 * time.Millisecond,
+		TimeoutCommit:                    1000 * time.Millisecond,
+		SkipTimeoutCommit:                false,
+		CreateEmptyBlocks:                true,
+		CreateEmptyBlocksInterval:        0 * time.Second,
+		PeerGossipSleepDuration:          100 * time.Millisecond,
+		PeerQueryMaj23SleepDuration:      2000 * time.Millisecond,
+		PeerGossipIntraloopSleepDuration: 0 * time.Second,
+		DoubleSignCheckHeight:            int64(0),
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Testing builders
 
 // TestUserConfig returns a basic user configuration for testing a CometBFT node.
-func TestUserConfig() MultiplexUserConfig {
-	return MultiplexUserConfig{
+func TestUserConfig() ScopedUserConfig {
+	return ScopedUserConfig{
 		UserConfig: cfg.DefaultUserConfig(),
 	}
 }
 
-// TestPluralUserConfig returns a plural replication configuration for testing a CometBFT node.
-func TestPluralUserConfig(userScopes map[string][]string) MultiplexUserConfig {
+// TestScopedUserConfig returns a scoped configuration for UserConfig.
+func TestScopedUserConfig(userScopes map[string][]string) ScopedUserConfig {
 	configScopes := make(map[string][]string, len(userScopes))
 	if len(userScopes) == 0 {
 		configScopes = map[string][]string{
