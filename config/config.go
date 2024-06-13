@@ -299,6 +299,24 @@ func DefaultBaseConfig() BaseConfig {
 	}
 }
 
+// MultiplexBaseConfig returns a multiplex base configuration for a CometBFT node.
+// Note: multiplex is disabled by default using singular mode!
+func MultiplexBaseConfig(
+	repl DataReplicationConfig,
+	userScopes map[string][]string,
+) BaseConfig {
+	if repl == SingularReplicationMode() || len(userScopes) == 0 {
+		return DefaultBaseConfig()
+	}
+
+	config := DefaultBaseConfig()
+	config.UserConfig = UserConfig{
+		Replication: PluralReplicationMode(),
+		UserScopes:  userScopes,
+	}
+	return config
+}
+
 // TestBaseConfig returns a base configuration for testing a CometBFT node.
 func TestBaseConfig() BaseConfig {
 	cfg := DefaultBaseConfig()
