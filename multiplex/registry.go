@@ -77,6 +77,7 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 	sw := mx.EventSwitches[userScopeHash]
 	addrBook := mx.AddressBooks[userScopeHash]
 	indexerService := mx.IndexerServices[userScopeHash]
+	state := mx.ChainStates[userScopeHash]
 	consensusState := mx.ConsensusStates[userScopeHash]
 	proxyApp := mx.AppConns[userScopeHash]
 	eventBus := mx.EventBuses[userScopeHash]
@@ -95,6 +96,7 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 		sw:             sw.Switch,
 		eventBus:       eventBus,
 		indexerService: indexerService,
+		state:          &state.State,
 		consensusState: consensusState,
 		proxyApp:       proxyApp,
 		mempool:        mempool,

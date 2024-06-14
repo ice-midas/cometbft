@@ -2,6 +2,7 @@ package multiplex
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 
@@ -71,8 +72,8 @@ func GetScopedDB(
 	multiplex MultiplexDB,
 	userScopeHash string,
 ) (usDB *ScopedDB, err error) {
-	scopeHash := []byte(userScopeHash)
-	if len(scopeHash) != sha256.Size {
+	scopeHash, err := hex.DecodeString(userScopeHash)
+	if err != nil || len(scopeHash) != sha256.Size {
 		return nil, fmt.Errorf("incorrect scope hash for user scoped DB, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 

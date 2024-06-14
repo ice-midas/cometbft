@@ -507,10 +507,13 @@ func NewMultiplexNode(ctx context.Context,
 		AddressBooks:    addressBooks,
 		ChainStates:     multiplexState,
 		ConsensusStates: multiplexConsensusState,
+		StateStores:     multiplexStateStore,
+		BlockStores:     multiplexBlockStore,
 		IndexerServices: multiplexIndexer,
 		AppConns:        multiplexAppConns,
 		EventBuses:      multiplexEventBus,
 		EventSwitches:   switchMultiplex,
+		Pruners:         multiplexPruner,
 	}
 
 	nodeMultiplex := &NodeRegistry{

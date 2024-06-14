@@ -18,7 +18,7 @@ func TestMultiplexFSEnsureRootMultiplex(t *testing.T) {
 	// setup temp dir for test
 	tmpDir, err := os.MkdirTemp("", "config-test")
 	require.NoError(err)
-	defer os.RemoveAll(tmpDir)
+	//defer os.RemoveAll(tmpDir)
 
 	// create root dir
 	config.EnsureRoot(tmpDir)
@@ -40,12 +40,19 @@ func TestMultiplexFSEnsureRootMultiplex(t *testing.T) {
 
 	testCases := []string{
 		filepath.Join("data"),
+		filepath.Join("config"),
 		filepath.Join("data", "CC8E6555A3F401FF61DA098F94D325E7041BC43A"),
-		filepath.Join("data", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "Default"),
-		filepath.Join("data", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "Other"),
+		filepath.Join("data", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "1A63C0E60122F9BB"), // "Default"
+		filepath.Join("data", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "C26A93BCF48CCE18"), // "Other"
 		filepath.Join("data", "FF1410CEEB411E55487701C4FEE65AACE7115DC0"),
-		filepath.Join("data", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "Default"),
-		filepath.Join("data", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "ReplChain"),
+		filepath.Join("data", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "D1ED2B487F2E93CC"), // "Default"
+		filepath.Join("data", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "1A20753306FF8E39"), // "ReplChain"
+		filepath.Join("config", "CC8E6555A3F401FF61DA098F94D325E7041BC43A"),
+		filepath.Join("config", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "1A63C0E60122F9BB"),
+		filepath.Join("config", "CC8E6555A3F401FF61DA098F94D325E7041BC43A", "C26A93BCF48CCE18"),
+		filepath.Join("config", "FF1410CEEB411E55487701C4FEE65AACE7115DC0"),
+		filepath.Join("config", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "D1ED2B487F2E93CC"),
+		filepath.Join("config", "FF1410CEEB411E55487701C4FEE65AACE7115DC0", "1A20753306FF8E39"),
 	}
 
 	ensureFiles(t, tmpDir, testCases...)
