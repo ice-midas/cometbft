@@ -161,6 +161,12 @@ type DBStore struct {
 	dbStore
 }
 
+func NewDBStore(db dbm.DB, options StoreOptions) Store {
+	return &DBStore{
+		dbStore: NewStore(db, options).(dbStore),
+	}
+}
+
 // dbStore wraps a db (github.com/cometbft/cometbft-db).
 type dbStore struct {
 	db dbm.DB

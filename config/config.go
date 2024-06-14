@@ -126,6 +126,27 @@ func TestConfig() *Config {
 	}
 }
 
+// MultiplexTestConfig returns a configuration that can be used for testing
+// the multiplex node implementation (plural replication mode).
+func MultiplexTestConfig(
+	repl DataReplicationConfig,
+	userScopes map[string][]string,
+) *Config {
+	return &Config{
+		BaseConfig:      MultiplexTestBaseConfig(repl, userScopes),
+		RPC:             TestRPCConfig(),
+		GRPC:            TestGRPCConfig(),
+		P2P:             TestP2PConfig(),
+		Mempool:         TestMempoolConfig(),
+		StateSync:       TestStateSyncConfig(),
+		BlockSync:       TestBlockSyncConfig(),
+		Consensus:       TestConsensusConfig(),
+		Storage:         TestStorageConfig(),
+		TxIndex:         TestTxIndexConfig(),
+		Instrumentation: TestInstrumentationConfig(),
+	}
+}
+
 // SetRoot sets the RootDir for all Config structs.
 func (cfg *Config) SetRoot(root string) *Config {
 	cfg.BaseConfig.RootDir = root
@@ -315,6 +336,17 @@ func MultiplexBaseConfig(
 		UserScopes:  userScopes,
 	}
 	return config
+}
+
+// MultiplexTestBaseConfig returns a base configuration for testing a CometBFT node.
+func MultiplexTestBaseConfig(
+	repl DataReplicationConfig,
+	userScopes map[string][]string,
+) BaseConfig {
+	cfg := MultiplexBaseConfig(repl, userScopes)
+	cfg.ProxyApp = "kvstore"
+	cfg.DBBackend = "memdb"
+	return cfg
 }
 
 // TestBaseConfig returns a base configuration for testing a CometBFT node.
@@ -1653,11 +1685,24 @@ type UserConfig struct {
 	UserScopes map[string][]string `mapstructure:"scopes"`
 }
 
-// GetAddress() returns a list of user address from the UserScopes in config.
+// GetAddresses() returns a list of user address from the UserScopes in config.
 func (c *UserConfig) GetAddresses() []string {
 	r := make([]string, 0, len(c.UserScopes))
 	for k := range c.UserScopes {
 		r = append(r, k)
+	}
+	return r
+}
+
+// GetScopes() returns a list of scopes prefixed by user addresses
+// from the UserScopes in config.
+func (c *UserConfig) GetScopes() []string {
+	r := make([]string, 0, len(c.UserScopes))
+	for address, scopes := range c.UserScopes {
+		for _, scope := range scopes {
+			prefixedScope := address + ":" + scope
+			r = append(r, prefixedScope)
+		}
 	}
 	return r
 }

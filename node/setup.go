@@ -657,6 +657,11 @@ func LoadStateFromDBOrGenesisDocProviderWithConfig(
 	}
 
 	csGenDoc, err := icsGenDoc.DefaultGenesisDoc()
+	if err != nil {
+		return sm.State{}, nil, err
+	}
+
+	// Validate and complete genesis doc
 	if err = csGenDoc.ValidateAndComplete(); err != nil {
 		return sm.State{}, nil, fmt.Errorf("error in genesis doc: %w", err)
 	}

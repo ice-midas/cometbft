@@ -597,7 +597,6 @@ func NewNodeWithServices(
 	consensusState *cs.State,
 	stateSync bool,
 	stateSyncGenesis sm.State,
-
 ) *Node {
 	return &Node{
 		config:        config,
