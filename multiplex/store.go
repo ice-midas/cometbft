@@ -2,6 +2,7 @@ package multiplex
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -21,7 +22,7 @@ var (
 // ScopedStateStore embeds a DBStore and adds a scope hash
 type ScopedStateStore struct {
 	ScopeHash string
-	sm.DBStore
+	*sm.DBStore
 }
 
 // ScopedBlockStore embeds a BlockStore and adds a scope hash
@@ -77,7 +78,7 @@ func MultiplexStateStoreProvider(
 	for _, db := range multiplex {
 		mStore[db.ScopeHash] = &ScopedStateStore{
 			ScopeHash: db.ScopeHash,
-			DBStore:   sm.NewStore(db, options).(sm.DBStore),
+			DBStore:   sm.NewDBStore(db, options).(*sm.DBStore),
 		}
 	}
 
@@ -113,8 +114,8 @@ func GetScopedStateStore(
 	multiplex MultiplexStateStore,
 	userScopeHash string,
 ) (*ScopedStateStore, error) {
-	scopeHash := []byte(userScopeHash)
-	if len(scopeHash) != sha256.Size {
+	scopeHash, err := hex.DecodeString(userScopeHash)
+	if err != nil || len(scopeHash) != sha256.Size {
 		return nil, fmt.Errorf("incorrect scope hash for state store multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
@@ -130,8 +131,8 @@ func GetScopedBlockStore(
 	multiplex MultiplexBlockStore,
 	userScopeHash string,
 ) (*ScopedBlockStore, error) {
-	scopeHash := []byte(userScopeHash)
-	if len(scopeHash) != sha256.Size {
+	scopeHash, err := hex.DecodeString(userScopeHash)
+	if err != nil || len(scopeHash) != sha256.Size {
 		return nil, fmt.Errorf("incorrect scope hash for block store multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 

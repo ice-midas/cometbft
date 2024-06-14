@@ -2,6 +2,7 @@ package multiplex
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	sm "github.com/cometbft/cometbft/state"
@@ -25,8 +26,8 @@ func GetScopedState(
 	multiplex MultiplexState,
 	userScopeHash string,
 ) (*ScopedState, error) {
-	scopeHash := []byte(userScopeHash)
-	if len(scopeHash) != sha256.Size {
+	scopeHash, err := hex.DecodeString(userScopeHash)
+	if err != nil || len(scopeHash) != sha256.Size {
 		return nil, fmt.Errorf("incorrect scope hash for state multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 

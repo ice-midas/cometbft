@@ -633,6 +633,12 @@ func createSwitches(
 	return switchMultiplex, nil
 }
 
+// XXX:
+//
+// Passing []string is not enough to determine the subfolders structure, the
+// current implementation iterates through subfolders using the config and
+// *re-creates SHA256* hashes, which should not be necessary given a different
+// parameter set, e.g. adding the addressBookPaths to the method.
 func createAddressBooksAndSetOnSwitches(
 	config *cfg.Config,
 	userScopeHashes []string,
@@ -641,16 +647,41 @@ func createAddressBooksAndSetOnSwitches(
 	nodeKey *p2p.NodeKey,
 ) (MultiplexAddressBook, error) {
 	addressBookMultiplex := make(MultiplexAddressBook, len(userScopeHashes))
+	addressBookPaths := make(map[string]string, len(userScopeHashes))
+
+	// FIXME: instead of re-creating SHA256 hashes, the MultiplexFS can be used
+	// to retrieve the correct config files path per scope.
+	for _, userAddress := range config.GetAddresses() {
+		for _, scope := range config.UserScopes[userAddress] {
+			// XXX re-creating SHA256 should not be necessary
+
+			// Create scopeID, then SHA256 and create 8-bytes fingerprint
+			// The folder name is the hex representation of the fingerprint
+			scopeId := NewScopeID(userAddress, scope)
+			scopeHash := scopeId.Hash()
+			folderName := scopeId.Fingerprint()
+
+			// Uses one subfolder by user and one subfolder by scope
+			bookPath := filepath.Join(config.RootDir, cfg.DefaultConfigDir, userAddress, folderName)
+
+			addressBookPaths[scopeHash] = bookPath
+		}
+	}
+
 	for _, userScopeHash := range userScopeHashes {
 		if _, ok := switchMultiplex[userScopeHash]; !ok {
 			return nil, fmt.Errorf("could not find switch in multiplex with scope hash %s", userScopeHash)
 		}
 
-		scopeId := NewScopeIDFromHash(userScopeHash)
-		scopedDir := filepath.Join(cfg.DefaultConfigDir, scopeId.Fingerprint())
+		if _, ok := addressBookPaths[userScopeHash]; !ok {
+			return nil, fmt.Errorf("could not find address book path with scope hash %s", userScopeHash)
+		}
+
+		scopedDir := addressBookPaths[userScopeHash]
 		addrBookFile := filepath.Join(scopedDir, cfg.DefaultAddrBookName)
-		if err := os.MkdirAll(scopedDir, os.ModePerm); err != nil {
-			return nil, err
+
+		if _, err := os.Stat(scopedDir); err != nil {
+			return nil, fmt.Errorf("could not open address book file %s: %w", addrBookFile, err)
 		}
 
 		addrBook := pex.NewAddrBook(addrBookFile, config.P2P.AddrBookStrict)
@@ -769,6 +800,28 @@ var (
 	genesisDocKey     = []byte("mxGenesisDoc")
 	genesisDocHashKey = []byte("mxGenesisDocHash")
 )
+
+// DefaultMultiplexNode returns a CometBFT node with default settings for the
+// PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
+// It implements NodeProvider.
+func DefaultMultiplexNode(config *cfg.Config, logger log.Logger) (*NodeRegistry, error) {
+	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load or gen node key %s: %w", config.NodeKeyFile(), err)
+	}
+
+	return NewMultiplexNode(
+		context.Background(),
+		config,
+		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
+		nodeKey,
+		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
+		PluralUserGenesisDocProviderFunc(config),
+		cfg.DefaultDBProvider,
+		node.DefaultMetricsProvider(config.Instrumentation),
+		logger,
+	)
+}
 
 // LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig load a state multiplex
 // using a database multiplex and a genesis doc provider. This factory adds one

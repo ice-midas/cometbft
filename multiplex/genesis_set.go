@@ -30,7 +30,11 @@ type ChecksummedGenesisDocSet struct {
 
 // DefaultGenesisDoc() implements IChecksummedGenesisDoc
 func (c *ChecksummedGenesisDocSet) DefaultGenesisDoc() (*types.GenesisDoc, error) {
-	return nil, fmt.Errorf("no default genesis doc available in plural replication mode")
+	if len(c.GenesisDocs.GenesisDocs) > 1 {
+		return nil, fmt.Errorf("no default genesis doc available in plural replication mode")
+	}
+
+	return &c.GenesisDocs.GenesisDocs[0].GenesisDoc, nil
 }
 
 // GenesisDocByScope() implements IChecksummedGenesisDoc
