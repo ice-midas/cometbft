@@ -1,14 +1,15 @@
 package multiplex
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/tmhash"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 )
 
 // ScopedUserConfig embeds UserConfig and computes SHA256 hashes
@@ -35,6 +36,7 @@ func (c *ScopedUserConfig) computeUserScopeHashes() error {
 		return nil
 	}
 
+	c.userScopeHashes = map[string][]string{}
 	for userAddress, scopes := range c.UserScopes {
 		// Create SHA256 hashes of the pair of user address and scope
 		var userScopeHashes []string
@@ -164,36 +166,37 @@ type scopeID struct {
 	string
 }
 
-func (s scopeID) Hash() (sum string) {
+func (s *scopeID) Hash() string {
 	if len(s.ScopeHash) == 0 {
 		sum256 := tmhash.Sum([]byte(s.string))
-		s.ScopeHash = cmtbytes.HexBytes(sum256).String()
+		s.ScopeHash = hex.EncodeToString(sum256)
 	}
 
-	return s.ScopeHash
+	return strings.ToUpper(s.ScopeHash)
 }
 
-func (s scopeID) Fingerprint() (fp string) {
+func (s *scopeID) Fingerprint() string {
 	if len(s.ScopeHash) == 0 {
-		s.Hash()
+		s.ScopeHash = s.Hash()
 	}
 
-	hashBytes := cmtbytes.HexBytes([]byte(s.ScopeHash)[:fingerprintSize])
-	return hashBytes.String()
+	hashBytes, _ := hex.DecodeString(s.ScopeHash)
+	fpBytes := hashBytes[:fingerprintSize]
+	return strings.ToUpper(hex.EncodeToString(fpBytes))
 }
 
-func (s scopeID) String() string {
+func (s *scopeID) String() string {
 	return s.string
 }
 
-func NewScopeID(userAddress string, scope string) scopeID {
-	return scopeID{
+func NewScopeID(userAddress string, scope string) *scopeID {
+	return &scopeID{
 		string: fmt.Sprintf("%s:%s", userAddress, scope),
 	}
 }
 
-func NewScopeIDFromHash(scopeHash string) scopeID {
-	return scopeID{
-		ScopeHash: scopeHash,
+func NewScopeIDFromHash(scopeHash string) *scopeID {
+	return &scopeID{
+		ScopeHash: strings.ToUpper(scopeHash),
 	}
 }

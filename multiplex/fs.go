@@ -2,6 +2,7 @@ package multiplex
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,22 +31,35 @@ func MultiplexFSProvider(config *cfg.Config) (multiplex MultiplexFS, err error) 
 	// The current two-level fs is easiest for testing and investigations.
 	multiplex = map[string]string{}
 
-	// Storage is located in scopes subfolders per each user
-	baseDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
-	for _, userAddress := range config.GetAddresses() {
-		// Uses one subfolder by user
-		userDir := filepath.Join(baseDir, userAddress)
+	//XXX also check config subfolders
 
+	// Storage is located in scopes subfolders per each user
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+	baseConfDir := filepath.Join(config.RootDir, cfg.DefaultConfigDir)
+	for _, userAddress := range config.GetAddresses() {
+		// Uses one subfolder by user in data/ and one in config/
+		userDataDir := filepath.Join(baseDataDir, userAddress)
+		userConfDir := filepath.Join(baseConfDir, userAddress)
+
+		// .. and one subfolder by scope
 		for _, scope := range config.UserScopes[userAddress] {
-			// .. and one subfolder by scope
-			scopedDir := filepath.Join(userDir, scope)
-			scopeID := NewScopeID(userAddress, scope)
-			scopeHash := scopeID.Hash()
-			multiplex[scopeHash] = scopedDir
+			// Create scopeID, then SHA256 and create 8-bytes fingerprint
+			// The folder name is the hex representation of the fingerprint
+			scopeId := NewScopeID(userAddress, scope)
+			folderName := scopeId.Fingerprint()
+
+			scopedDataFolder := filepath.Join(userDataDir, folderName)
+			scopedConfFolder := filepath.Join(userConfDir, folderName)
+			multiplex[scopeId.Hash()] = scopedDataFolder
 
 			// Any error here means the directory is not accessible
-			if _, err := os.Stat(scopedDir); err != nil {
-				return nil, fmt.Errorf("missing mandatory folder %s: %w", scopedDir, err)
+			if _, err := os.Stat(scopedDataFolder); err != nil {
+				return nil, fmt.Errorf("missing mandatory data folder %s: %w", scopedDataFolder, err)
+			}
+
+			// Any error here means the directory is not accessible
+			if _, err := os.Stat(scopedConfFolder); err != nil {
+				return nil, fmt.Errorf("missing mandatory config folder %s: %w", scopedConfFolder, err)
 			}
 		}
 	}
@@ -62,8 +76,8 @@ func GetScopedFS(
 	multiplex MultiplexFS,
 	userScopeHash string,
 ) (string, error) {
-	scopeHash := []byte(userScopeHash)
-	if len(scopeHash) != sha256.Size {
+	scopeHash, err := hex.DecodeString(userScopeHash)
+	if err != nil || len(scopeHash) != sha256.Size {
 		return cfg.DefaultDataDir, fmt.Errorf("incorrect scope hash for state multiplex, got %v bytes, expected %v bytes", len(scopeHash), sha256.Size)
 	}
 
