@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cosmos/gogoproto/proto"
@@ -141,6 +142,7 @@ type MultiplexTransport struct {
 
 	acceptc chan accept
 	closec  chan struct{}
+	once    sync.Once
 
 	// Lookup table for duplicate ip and id checks.
 	conns       ConnSet
@@ -242,7 +244,11 @@ func (mt *MultiplexTransport) Dial(
 
 // Close implements transportLifecycle.
 func (mt *MultiplexTransport) Close() error {
-	close(mt.closec)
+	// Using sync.Once to prevent concurrent closing of the channel
+	// TBI: Whether introducing a Mutex performs better or not.
+	mt.once.Do(func() {
+		close(mt.closec)
+	})
 
 	if mt.listener != nil {
 		return mt.listener.Close()
