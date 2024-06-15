@@ -18,7 +18,7 @@ func TestMultiplexFSEnsureRootMultiplex(t *testing.T) {
 	// setup temp dir for test
 	tmpDir, err := os.MkdirTemp("", "config-test")
 	require.NoError(err)
-	//defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir)
 
 	// create root dir
 	config.EnsureRoot(tmpDir)
