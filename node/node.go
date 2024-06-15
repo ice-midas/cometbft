@@ -1036,6 +1036,10 @@ func (n *Node) PrivValidator() types.PrivValidator {
 	return n.privValidator
 }
 
+func (n *Node) SetPrivValidator(pv types.PrivValidator) {
+	n.privValidator = pv
+}
+
 // GenesisDoc returns the Node's GenesisDoc.
 func (n *Node) GenesisDoc() *types.GenesisDoc {
 	return n.genesisDoc
