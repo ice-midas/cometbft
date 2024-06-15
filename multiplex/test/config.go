@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/cometbft/cometbft/config"
@@ -42,6 +43,8 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 	// IMPORTANT:
 	// If there is a genesis file at the configured path, read it and expect it
 	// to contain a genesis doc set ; otherwise create it with testUserGenesisFmt.
+	// TODO: Right now, the chainID is forcefully overwritten using a loop ; it is
+	// the network owner's responsibility to provide separate chainIDs.
 
 	genesisFilePath := filepath.Join(rootDir, baseConfig.Genesis)
 	if !cmtos.FileExists(genesisFilePath) {
@@ -53,13 +56,13 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 			testGenesis = fmt.Sprintf(testUserGenesisFmt, TestUserAddress, TestScope, chainID)
 		} else {
 			testGenesis = `[`
-			for _, scopeDesc := range baseConfig.GetScopes() {
+			for i, scopeDesc := range baseConfig.GetScopes() {
 				parts := strings.Split(scopeDesc, ":")
 				userAddress, scope := parts[0], parts[1]
 
 				// Creates one genesis doc per pair of user address and scope
-				// XXX TBI: may need separate chainID
-				scopedTestGenesis := fmt.Sprintf(testOneScopedGenesisFmt, userAddress, scope, chainID)
+				perUserChainID := chainID + "-" + strconv.Itoa(i)
+				scopedTestGenesis := fmt.Sprintf(testOneScopedGenesisFmt, userAddress, scope, perUserChainID)
 				testGenesis += scopedTestGenesis + ","
 			}
 

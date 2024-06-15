@@ -69,6 +69,9 @@ type NodeRegistry struct {
 	Nodes MultiplexNode
 }
 
+// ----------------------------------------------------------------------------
+// Builders
+
 // NewMultiplexNode returns a new, ready to go, multiplex CometBFT Node.
 // Multiplex-mode refers to the user-scoped replication strategy.
 func NewMultiplexNode(ctx context.Context,
