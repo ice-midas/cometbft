@@ -2,8 +2,13 @@ package multiplex
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,6 +16,7 @@ import (
 	dbm "github.com/cometbft/cometbft-db"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/tmhash"
+	cs "github.com/cometbft/cometbft/internal/consensus"
 	cmttest "github.com/cometbft/cometbft/internal/test"
 	"github.com/cometbft/cometbft/libs/log"
 	mxtest "github.com/cometbft/cometbft/multiplex/test"
@@ -18,6 +24,7 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
+	types "github.com/cometbft/cometbft/types"
 )
 
 // It is primordial that this test always uses `cmtnode` to be able to evaluate
@@ -190,6 +197,150 @@ func TestMultiplexNodeDefaultMultiplexNode(t *testing.T) {
 	assert.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
 }
 
+func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
+
+	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
+		"mx_node_default_multiplex_node_start_stop",
+		"",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+		},
+	)
+	defer os.RemoveAll(config.RootDir)
+
+	// create node registry
+	r, err := DefaultMultiplexNode(config, log.TestingLogger())
+	require.NoError(t, err)
+	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
+	assert.Equal(t, 1, len(r.Nodes), "the registry should contain exactly one node")
+	assert.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+	var wg sync.WaitGroup
+
+	// Tries to start/stop nodes SEQUENTIALLY
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+	for _, n := range r.Nodes {
+		wg.Add(1)
+		t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
+
+		walFolder := n.ScopeHash[:16] // uses hex
+
+		// Overwrite wal file on a per-node basis
+		walFile := filepath.Join(baseDataDir, "cs.wal", walFolder, "wal")
+
+		t.Logf("Using walFile: %s", walFile)
+		n.Config().Consensus.SetWalFile(walFile)
+
+		assertStartStopScopedNode(t, &wg, n)
+	}
+
+	wg.Wait()
+}
+
+func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
+
+	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
+		"mx_node_default_multiplex_node_start_stop",
+		"",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+			"FF190888BE0F48DE88927C3F49215B96548273AF": {"Scoping", "multiple scopes"},
+			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Private"},
+			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"Globals"},
+		},
+	)
+	defer os.RemoveAll(config.RootDir)
+
+	expectedNumChains := 5
+
+	// create node registry
+	r, err := DefaultMultiplexNode(config, log.TestingLogger())
+	require.NoError(t, err)
+	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
+	assert.Equal(t, expectedNumChains, len(r.Nodes), "the registry should contain correct number of nodes")
+	assert.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+	var wg sync.WaitGroup
+
+	// Tries to start/stop nodes SEQUENTIALLY
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+	for _, n := range r.Nodes {
+		wg.Add(1)
+		t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
+
+		walFolder := n.ScopeHash[:16] // uses hex
+
+		// Overwrite wal file on a per-node basis
+		walFile := filepath.Join(baseDataDir, "cs.wal", walFolder, "wal")
+
+		// We overwrite the wal file to allow parallel I/O for multiple nodes
+		t.Logf("Using walFile: %s", walFile)
+		n.Config().Consensus.SetWalFile(walFile)
+
+		// We always reset PrivValidator because it's not multiplexed yet
+		// and we overwrite it on the node instance to empty its' state
+		cmttest.ResetTestPrivValidator(config.RootDir, config.BaseConfig)
+
+		resetPrivValidator(t, n, config)
+		assertStartStopScopedNode(t, &wg, n)
+	}
+
+	wg.Wait()
+}
+
 // XXX TestMultiplexNodeCreatesMultipleAddressBooks
 // XXX TestMultiplexNodeCreatesMultipleWalFiles
 // XXX TestMultiplexNodeCreatesMultipleWalFiles
+
+func resetPrivValidator(t *testing.T, n *ScopedNode, config *cfg.Config) {
+	t.Helper()
+
+	newPV := privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile())
+	n.SetPrivValidator(newPV)
+
+	consensusReactor := n.Switch().Reactor("CONSENSUS").(*cs.Reactor)
+	consensusReactor.SetPrivValidator(newPV)
+}
+
+func assertStartStopScopedNode(t *testing.T, wg *sync.WaitGroup, n *ScopedNode) {
+	t.Helper()
+
+	err := n.Start()
+	require.NoError(t, err)
+
+	t.Logf("Started node %v", n.NodeInfo())
+	t.Logf("ScopeHash %s", n.ScopeHash)
+	t.Logf("ChainID: %s", n.GenesisDoc().ChainID)
+
+	// wait for the node to produce a block
+	blocksSub, err := n.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
+	require.NoError(t, err)
+	select {
+	case <-blocksSub.Out():
+	case <-blocksSub.Canceled():
+		t.Fatal("blocksSub was canceled")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the node to produce a block")
+	}
+
+	// stop the node
+	go func() {
+		defer wg.Done()
+		err = n.Stop()
+		require.NoError(t, err)
+	}()
+
+	select {
+	case <-n.Quit():
+	case <-time.After(5 * time.Second):
+		pid := os.Getpid()
+		p, err := os.FindProcess(pid)
+		if err != nil {
+			panic(err)
+		}
+		err = p.Signal(syscall.SIGABRT)
+		fmt.Println(err)
+		t.Fatal("timed out waiting for shutdown")
+		wg.Done()
+	}
+}
