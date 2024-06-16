@@ -646,6 +646,12 @@ func createAddressBooksAndSetOnSwitches(
 	p2pLogger log.Logger,
 	nodeKey *p2p.NodeKey,
 ) (MultiplexAddressBook, error) {
+	// Uses a singleton scope registry to create SHA256 once
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	addressBookMultiplex := make(MultiplexAddressBook, len(userScopeHashes))
 	addressBookPaths := make(map[string]string, len(userScopeHashes))
 
@@ -653,12 +659,14 @@ func createAddressBooksAndSetOnSwitches(
 	// to retrieve the correct config files path per scope.
 	for _, userAddress := range config.GetAddresses() {
 		for _, scope := range config.UserScopes[userAddress] {
-			// XXX re-creating SHA256 should not be necessary
+			// Query scope hash from registry to avoid re-creating SHA256
+			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
+			if err != nil {
+				return nil, err
+			}
 
-			// Create scopeID, then SHA256 and create 8-bytes fingerprint
 			// The folder name is the hex representation of the fingerprint
-			scopeId := NewScopeID(userAddress, scope)
-			scopeHash := scopeId.Hash()
+			scopeId := NewScopeIDFromHash(scopeHash)
 			folderName := scopeId.Fingerprint()
 
 			// Uses one subfolder by user and one subfolder by scope

@@ -31,7 +31,11 @@ func MultiplexFSProvider(config *cfg.Config) (multiplex MultiplexFS, err error) 
 	// The current two-level fs is easiest for testing and investigations.
 	multiplex = map[string]string{}
 
-	//XXX also check config subfolders
+	// Uses a singleton scope registry to create SHA256 once
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	// Storage is located in scopes subfolders per each user
 	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
@@ -43,14 +47,19 @@ func MultiplexFSProvider(config *cfg.Config) (multiplex MultiplexFS, err error) 
 
 		// .. and one subfolder by scope
 		for _, scope := range config.UserScopes[userAddress] {
-			// Create scopeID, then SHA256 and create 8-bytes fingerprint
+			// Query scope hash from registry to avoid re-creating SHA256
+			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
+			if err != nil {
+				return nil, err
+			}
+
 			// The folder name is the hex representation of the fingerprint
-			scopeId := NewScopeID(userAddress, scope)
+			scopeId := NewScopeIDFromHash(scopeHash)
 			folderName := scopeId.Fingerprint()
 
 			scopedDataFolder := filepath.Join(userDataDir, folderName)
 			scopedConfFolder := filepath.Join(userConfDir, folderName)
-			multiplex[scopeId.Hash()] = scopedDataFolder
+			multiplex[scopeHash] = scopedDataFolder
 
 			// Any error here means the directory is not accessible
 			if _, err := os.Stat(scopedDataFolder); err != nil {
