@@ -36,6 +36,11 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 	// The current two-level fs is easiest for testing and investigations.
 	multiplex = MultiplexDB{}
 
+	scopeRegistry, err := DefaultScopeHashProvider(&ctx.Config.UserConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	// Storage is located in scopes subfolders per each user
 	for _, userAddress := range ctx.Config.GetAddresses() {
 		// Uses one subfolder by user
@@ -50,8 +55,11 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 				return nil, err
 			}
 
-			scopeID := NewScopeID(userAddress, scope)
-			scopeHash := scopeID.Hash()
+			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
+			if err != nil {
+				return nil, err
+			}
+
 			usDB := &ScopedDB{
 				ScopeHash: scopeHash,
 				DB:        userDb,

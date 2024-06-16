@@ -1,15 +1,10 @@
 package multiplex
 
 import (
-	"encoding/hex"
-	"errors"
-	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto/tmhash"
 )
 
 // ScopedUserConfig embeds UserConfig and computes SHA256 hashes
@@ -28,30 +23,23 @@ type ScopedUserConfig struct {
 	userScopeHashes map[string][]string
 }
 
-// computeUserScopeHashes computes computes SHA256 hashes by pairing user
-// addresses and individual scopes (separated by `:`) such that every
-// combination of user address and scope can be referred to by hash
+// computeUserScopeHashes uses DefaultScopeHashProvider to populate the config
+// instance's userScopeHashes and userAddresses fields.
 func (c *ScopedUserConfig) computeUserScopeHashes() error {
 	if c.Replication == cfg.SingularReplicationMode() {
 		return nil
 	}
 
 	c.userScopeHashes = map[string][]string{}
-	for userAddress, scopes := range c.UserScopes {
-		// Create SHA256 hashes of the pair of user address and scope
-		var userScopeHashes []string
-		for _, scope := range scopes {
-			scopeId := NewScopeID(userAddress, scope)
-			userScopeHashes = append(userScopeHashes, scopeId.Hash())
-		}
-
-		// Builds a per-user slice of scope hashes
-		c.userScopeHashes[userAddress] = userScopeHashes
-		c.userAddresses = append(c.userAddresses, userAddress)
+	if scopeRegistry, err := DefaultScopeHashProvider(&c.UserConfig); err == nil {
+		c.userScopeHashes = scopeRegistry.ScopeHashes
+	} else {
+		return err
 	}
 
-	if c.Replication == cfg.PluralReplicationMode() && len(c.userScopeHashes) == 0 {
-		return errors.New("in plural replication mode, at least one user scope is required")
+	c.userAddresses = make([]string, len(c.UserScopes))
+	for userAddress, _ := range c.UserScopes {
+		c.userAddresses = append(c.userAddresses, userAddress)
 	}
 
 	return nil
@@ -150,53 +138,4 @@ func TestScopedUserConfig(userScopes map[string][]string) ScopedUserConfig {
 		configScopes,
 	)
 	return *cfg
-}
-
-// -----------------------------------------------------------------------------
-// scopeID
-// A private struct to deal with unique pairs of user address and scope.
-
-const (
-	fingerprintSize = 8
-)
-
-// scopeID embeds a string and adds a scope hash
-type scopeID struct {
-	ScopeHash string
-	string
-}
-
-func (s *scopeID) Hash() string {
-	if len(s.ScopeHash) == 0 {
-		sum256 := tmhash.Sum([]byte(s.string))
-		s.ScopeHash = hex.EncodeToString(sum256)
-	}
-
-	return strings.ToUpper(s.ScopeHash)
-}
-
-func (s *scopeID) Fingerprint() string {
-	if len(s.ScopeHash) == 0 {
-		s.ScopeHash = s.Hash()
-	}
-
-	hashBytes, _ := hex.DecodeString(s.ScopeHash)
-	fpBytes := hashBytes[:fingerprintSize]
-	return strings.ToUpper(hex.EncodeToString(fpBytes))
-}
-
-func (s *scopeID) String() string {
-	return s.string
-}
-
-func NewScopeID(userAddress string, scope string) *scopeID {
-	return &scopeID{
-		string: fmt.Sprintf("%s:%s", userAddress, scope),
-	}
-}
-
-func NewScopeIDFromHash(scopeHash string) *scopeID {
-	return &scopeID{
-		ScopeHash: strings.ToUpper(scopeHash),
-	}
 }
