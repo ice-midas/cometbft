@@ -1021,6 +1021,10 @@ func (n *Node) Config() *cfg.Config {
 	return n.config
 }
 
+func (n *Node) SetWalFile(walFile string) {
+	n.Config().Consensus.SetWalFile(walFile)
+}
+
 // ------------------------------------------------------------------------------
 
 func (n *Node) Listeners() []string {

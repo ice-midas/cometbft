@@ -78,6 +78,21 @@ type NodeRegistry struct {
 	Scopes []string
 }
 
+func (r *NodeRegistry) GetListenAddresses() MultiplexServiceAddress {
+	laddrs := make(MultiplexServiceAddress, len(r.Nodes))
+	for scopeHash, node := range r.Nodes {
+		laddrs[scopeHash] = map[string]string{
+			"P2P":      node.Config().P2P.ListenAddress,
+			"RPC":      node.Config().RPC.ListenAddress,
+			"GRPC":     node.Config().GRPC.ListenAddress,
+			"GRPCPriv": node.Config().GRPC.Privileged.ListenAddress,
+			//XXX prometheus
+		}
+	}
+
+	return laddrs
+}
+
 // ----------------------------------------------------------------------------
 // Builders
 
@@ -225,6 +240,7 @@ func NewMultiplexNode(ctx context.Context,
 	multiplexEvidenceReactor := make(MultiplexEvidenceReactor, numReplicatedChains)
 	multiplexPrivValidator := make(MultiplexPrivValidator, numReplicatedChains)
 	multiplexListenAddresses := make(MultiplexServiceAddress, numReplicatedChains)
+	multiplexNodeConfig := make(MultiplexNodeConfig, numReplicatedChains)
 
 	multiplexMetricsProvider := MultiplexMetricsProvider(config.Instrumentation)
 
@@ -262,6 +278,25 @@ func NewMultiplexNode(ctx context.Context,
 			"GRPC":     strings.Replace(config.GRPC.ListenAddress, ":36670", newGRPCPort, 1),
 			"GRPCPriv": strings.Replace(config.GRPC.Privileged.ListenAddress, ":36671", newGRPCPrivPort, 1),
 		}
+
+		// IMPORTANT:
+		//
+		// When multiplex (plural replication mode) is enabled, we currently overwrite
+		// the port mappings to use: p2p:30001..3000x, rpc:40001..4000x, etc.
+		// This is to prevent colliding network addresses when running multiple nodes
+		// on the same machine. An alternative solution to this would involve a router
+		// implementation that uses the correct listen addresses depending on chain.
+
+		// Deep-copy the config object to create multiple nodes
+		nodeConfig := cfg.NewConfigCopy(config)
+		nodeConfig.SetListenAddresses(
+			multiplexListenAddresses[userScopeHash]["P2P"],
+			multiplexListenAddresses[userScopeHash]["RPC"],
+			multiplexListenAddresses[userScopeHash]["GRPC"],
+			multiplexListenAddresses[userScopeHash]["GRPCPriv"],
+		)
+
+		multiplexNodeConfig[userScopeHash] = nodeConfig
 
 		// ------------------------------------------------------------------------
 		// ENVIRONMENT
@@ -323,7 +358,7 @@ func NewMultiplexNode(ctx context.Context,
 			return nil, err
 		}
 
-		indexerService, txIndexer, blockIndexer, err := createAndStartIndexerService(config,
+		indexerService, txIndexer, blockIndexer, err := createAndStartIndexerService(nodeConfig,
 			genDoc.ChainID, indexerMultiplexDB, eventBus, logger, userScopeHash)
 		if err != nil {
 			return nil, err
@@ -335,20 +370,23 @@ func NewMultiplexNode(ctx context.Context,
 		// If no address is provided, we use the default file-based priv validator
 		// implementation and create one FilePV per replicated chain.
 		var privValidator types.PrivValidator
-		if config.PrivValidatorListenAddr == "" {
+		if nodeConfig.PrivValidatorListenAddr == "" {
 			folderName := scopeId.Fingerprint()
 			privValKeyDir := filepath.Join(userConfDir, folderName)
 			privValStateDir := filepath.Join(userDataDir, folderName)
 
+			// fmt.Printf("using privValKeyFile: %s\n", filepath.Join(privValKeyDir, filepath.Base(nodeConfig.PrivValidatorKeyFile())))
+			// fmt.Printf("using privValStateFile: %s\n", filepath.Join(privValStateDir, filepath.Base(nodeConfig.PrivValidatorStateFile())))
+
 			privValidator = privval.LoadOrGenFilePV(
-				filepath.Join(privValKeyDir, filepath.Base(config.PrivValidatorKeyFile())),
-				filepath.Join(privValStateDir, filepath.Base(config.PrivValidatorStateFile())),
+				filepath.Join(privValKeyDir, filepath.Base(nodeConfig.PrivValidatorKeyFile())),
+				filepath.Join(privValStateDir, filepath.Base(nodeConfig.PrivValidatorStateFile())),
 			)
 		} else {
 			// If an address is provided, listen on the socket for a connection from an
 			// external signing process.
 			// FIXME: we should start services inside OnStart
-			privValidator, err = createAndStartPrivValidatorSocketClient(config.PrivValidatorListenAddr, genDoc.ChainID, logger)
+			privValidator, err = createAndStartPrivValidatorSocketClient(nodeConfig.PrivValidatorListenAddr, genDoc.ChainID, logger)
 			if err != nil {
 				return nil, fmt.Errorf("error with private validator socket client: %w", err)
 			}
@@ -363,7 +401,7 @@ func NewMultiplexNode(ctx context.Context,
 		// CONSENSUS
 
 		// Determine whether we should attempt state sync.
-		stateSync := config.StateSync.Enable && !onlyValidatorIsUs(*stateMachine, pubKey)
+		stateSync := nodeConfig.StateSync.Enable && !onlyValidatorIsUs(*stateMachine, pubKey)
 		if stateSync && stateMachine.LastBlockHeight > 0 {
 			logger.Info("Found local state with non-zero height, skipping state sync")
 			stateSync = false
@@ -398,10 +436,10 @@ func NewMultiplexNode(ctx context.Context,
 
 		logNodeStartupInfo(*stateMachine, pubKey, logger, consensusLogger)
 
-		mempool, mempoolReactor := createMempoolAndMempoolReactor(config, proxyApp, *stateMachine, waitSync, memplMetrics, logger)
+		mempool, mempoolReactor := createMempoolAndMempoolReactor(nodeConfig, proxyApp, *stateMachine, waitSync, memplMetrics, logger)
 
 		evidenceReactor, evidencePool, err := createEvidenceReactor(
-			config,
+			nodeConfig,
 			evidenceMultiplexDB,
 			stateStore,
 			blockStore,
@@ -413,7 +451,7 @@ func NewMultiplexNode(ctx context.Context,
 		}
 
 		pruner, err := createPruner(
-			config,
+			nodeConfig,
 			txIndexer,
 			blockIndexer,
 			stateStore,
@@ -445,13 +483,13 @@ func NewMultiplexNode(ctx context.Context,
 			}
 		}
 		// Don't start block sync if we're doing a state sync first.
-		bcReactor, err := createBlocksyncReactor(config, stateMachine, blockExec, blockStore, blockSync && !stateSync, logger, bsMetrics, offlineStateSyncHeight)
+		bcReactor, err := createBlocksyncReactor(nodeConfig, stateMachine, blockExec, blockStore, blockSync && !stateSync, logger, bsMetrics, offlineStateSyncHeight)
 		if err != nil {
 			return nil, fmt.Errorf("could not create blocksync reactor: %w", err)
 		}
 
 		consensusReactor, consensusState := createConsensusReactor(
-			config, stateMachine, blockExec, blockStore, mempool, evidencePool,
+			nodeConfig, stateMachine, blockExec, blockStore, mempool, evidencePool,
 			privValidator, csMetrics, waitSync, eventBus, consensusLogger, offlineStateSyncHeight,
 		)
 
@@ -464,7 +502,7 @@ func NewMultiplexNode(ctx context.Context,
 		// we should clean this whole thing up. See:
 		// https://github.com/tendermint/tendermint/issues/4644
 		stateSyncReactor := statesync.NewReactor(
-			*config.StateSync,
+			*nodeConfig.StateSync,
 			proxyApp.Snapshot(),
 			proxyApp.Query(),
 			ssMetrics,
@@ -615,47 +653,13 @@ func NewMultiplexNode(ctx context.Context,
 			return nil, fmt.Errorf("could not retrieve multiplex services with scope hash %s: %w", userScopeHash, err)
 		}
 
-		// IMPORTANT:
-		//
-		// When multiplex (plural replication mode) is enabled, we currently overwrite
-		// the port mappings to use: p2p:30001..3000x, rpc:40001..4000x, etc.
-		// This is to prevent colliding network addresses when running multiple nodes
-		// on the same machine. An alternative solution to this would involve a router
-		// implementation that uses the correct listen addresses depending on chain.
-
-		var p2pListenAddr, rpcListenAddr, grpcListenAddr, grpcPrivListenAddr string
-
-		listenAddresses, ok := multiplexServices.ListenAddresses[userScopeHash]
-		if !ok || len(listenAddresses) == 0 {
-			p2pListenAddr = config.P2P.ExternalAddress
-			rpcListenAddr = config.RPC.ListenAddress
-			grpcListenAddr = config.GRPC.ListenAddress
-			grpcPrivListenAddr = config.GRPC.Privileged.ListenAddress
-
-			if p2pListenAddr == "" {
-				p2pListenAddr = config.P2P.ListenAddress
-			}
-
-			logger.Info("using default listen addresses", "scope", userScopeHash, "p2p", p2pListenAddr, "rpc", rpcListenAddr)
-		} else {
-			p2pListenAddr = listenAddresses["P2P"]
-			rpcListenAddr = listenAddresses["RPC"]
-			grpcListenAddr = listenAddresses["GRPC"]
-			grpcPrivListenAddr = listenAddresses["GRPCPriv"]
-
-			logger.Info("using custom listen addresses", "scope", userScopeHash, "p2p", p2pListenAddr, "rpc", rpcListenAddr)
+		nodeConfig, ok := multiplexNodeConfig[userScopeHash]
+		if !ok {
+			return nil, fmt.Errorf("could not retrieve multiplex node config with scope hash %s", userScopeHash)
 		}
 
-		configBeforeMX := config
-		config.SetListenAddresses(
-			p2pListenAddr,
-			rpcListenAddr,
-			grpcListenAddr,
-			grpcPrivListenAddr,
-		)
-
 		node := node.NewNodeWithServices(
-			config,
+			nodeConfig,
 			genDoc,
 			nodeInfo,
 			nodeKey,
@@ -687,14 +691,13 @@ func NewMultiplexNode(ctx context.Context,
 		}
 
 		// stores this node instance in the multiplex
+		nodeListenAddrs := nodeConfig.GetListenAddresses()
 		nodeMultiplex.Nodes[userScopeHash] = &ScopedNode{
 			ScopeHash:  userScopeHash,
-			ListenAddr: p2pListenAddr,
-			RPCAddress: rpcListenAddr,
+			ListenAddr: nodeListenAddrs["P2P"],
+			RPCAddress: nodeListenAddrs["RPC"],
 			Node:       node,
 		}
-
-		config = configBeforeMX
 	}
 
 	return nodeMultiplex, nil

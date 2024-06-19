@@ -69,8 +69,17 @@ type ScopeRegistry struct {
 	UsersScopes UserScopeMap
 }
 
+func (r *ScopeRegistry) GetScopeHashes() []string {
+	var allHashes []string
+	for _, scopeHashes := range r.ScopeHashes {
+		allHashes = append(allHashes, scopeHashes...)
+	}
+
+	return allHashes
+}
+
 // GetScopeHashes returns a slice of scope hashes by user address
-func (r *ScopeRegistry) GetScopeHashes(
+func (r *ScopeRegistry) GetScopeHashesByUser(
 	userAddress string,
 ) ([]string, error) {
 	if _, ok := r.ScopeHashes[userAddress]; !ok {
