@@ -60,6 +60,11 @@ func ResetTestPrivValidator(rootDir string, conf config.BaseConfig) {
 	cmtos.MustWriteFile(privStateFilePath, []byte(testPrivValidatorState), 0o644)
 }
 
+func ResetTestPrivValidatorFiles(privKeyFilePath string, privStateFilePath string) {
+	cmtos.MustWriteFile(privKeyFilePath, []byte(testPrivValidatorKey), 0o644)
+	cmtos.MustWriteFile(privStateFilePath, []byte(testPrivValidatorState), 0o644)
+}
+
 var testGenesisFmt = `{
   "genesis_time": "2018-10-10T08:20:13.695936996Z",
   "chain_id": "%s",
