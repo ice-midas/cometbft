@@ -289,7 +289,7 @@ func createAndStartPrivValidatorSocketClient(
 		return nil, fmt.Errorf("failed to start private validator: %w", err)
 	}
 
-	// try to get a pubkey from private validate first time
+	// try to get a pubkey from private validator first time
 	_, err = pvsc.GetPubKey()
 	if err != nil {
 		return nil, fmt.Errorf("can't get pubkey: %w", err)
@@ -478,34 +478,40 @@ func createConsensusReactor(config *cfg.Config,
 	return consensusReactor, consensusState
 }
 
-func createTransport(
+func createTransports(
 	config *cfg.Config,
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
+	userScopeHashes []string,
 	multiplexAppConns map[string]*proxy.AppConns,
 ) (
-	*p2p.MultiplexTransport,
-	[]p2p.PeerFilterFunc,
+	MultiplexP2PTransport,
+	MultiplexPeerFilterFunc,
 ) {
-	var (
-		mConnConfig = p2p.MConnConfig(config.P2P)
-		transport   = p2p.NewMultiplexTransport(nodeInfo, *nodeKey, mConnConfig)
-		connFilters = []p2p.ConnFilterFunc{}
-		peerFilters = []p2p.PeerFilterFunc{}
-	)
 
-	if !config.P2P.AllowDuplicateIP {
-		connFilters = append(connFilters, p2p.ConnDuplicateIPFilter())
-	}
+	transportMultiplex := make(MultiplexP2PTransport, len(userScopeHashes))
+	peerFilterMultiplex := make(MultiplexPeerFilterFunc, len(userScopeHashes))
 
-	// Filter peers by addr or pubkey with an ABCI query.
-	// If the query return code is OK, add peer.
-	if config.FilterPeers {
-		connFilters = append(
-			connFilters,
-			// ABCI query for address filtering.
-			func(_ p2p.ConnSet, c net.Conn, _ []net.IP) error {
-				for _, proxyApp := range multiplexAppConns {
+	for _, userScopeHash := range userScopeHashes {
+		var (
+			mConnConfig = p2p.MConnConfig(config.P2P)
+			transport   = p2p.NewMultiplexTransport(nodeInfo, *nodeKey, mConnConfig)
+			connFilters = []p2p.ConnFilterFunc{}
+			peerFilters = []p2p.PeerFilterFunc{}
+		)
+
+		if !config.P2P.AllowDuplicateIP {
+			connFilters = append(connFilters, p2p.ConnDuplicateIPFilter())
+		}
+
+		// Filter peers by addr or pubkey with an ABCI query.
+		// If the query return code is OK, add peer.
+		if config.FilterPeers {
+			connFilters = append(
+				connFilters,
+				// ABCI query for address filtering.
+				func(_ p2p.ConnSet, c net.Conn, _ []net.IP) error {
+					proxyApp := multiplexAppConns[userScopeHash]
 					res, err := (*proxyApp).Query().Query(context.TODO(), &abci.QueryRequest{
 						Path: "/p2p/filter/addr/" + c.RemoteAddr().String(),
 					})
@@ -515,17 +521,16 @@ func createTransport(
 					if res.IsErr() {
 						return fmt.Errorf("error querying abci app: %v", res)
 					}
-				}
 
-				return nil
-			},
-		)
+					return nil
+				},
+			)
 
-		peerFilters = append(
-			peerFilters,
-			// ABCI query for ID filtering.
-			func(_ p2p.IPeerSet, p p2p.Peer) error {
-				for _, proxyApp := range multiplexAppConns {
+			peerFilters = append(
+				peerFilters,
+				// ABCI query for ID filtering.
+				func(_ p2p.IPeerSet, p p2p.Peer) error {
+					proxyApp := multiplexAppConns[userScopeHash]
 					res, err := (*proxyApp).Query().Query(context.TODO(), &abci.QueryRequest{
 						Path: fmt.Sprintf("/p2p/filter/id/%s", p.ID()),
 					})
@@ -535,27 +540,33 @@ func createTransport(
 					if res.IsErr() {
 						return fmt.Errorf("error querying abci app: %v", res)
 					}
-				}
 
-				return nil
-			},
-		)
+					return nil
+				},
+			)
+		}
+
+		p2p.MultiplexTransportConnFilters(connFilters...)(transport)
+
+		// XXX due to multiplex of multiplex, we must probably divide the max peers
+		//     by the number of replicated chains.
+
+		// Limit the number of incoming connections.
+		max := config.P2P.MaxNumInboundPeers + len(splitAndTrimEmpty(config.P2P.UnconditionalPeerIDs, ",", " "))
+		p2p.MultiplexTransportMaxIncomingConnections(max)(transport)
+
+		transportMultiplex[userScopeHash] = transport
+		peerFilterMultiplex[userScopeHash] = peerFilters
 	}
 
-	p2p.MultiplexTransportConnFilters(connFilters...)(transport)
-
-	// Limit the number of incoming connections.
-	max := config.P2P.MaxNumInboundPeers + len(splitAndTrimEmpty(config.P2P.UnconditionalPeerIDs, ",", " "))
-	p2p.MultiplexTransportMaxIncomingConnections(max)(transport)
-
-	return transport, peerFilters
+	return transportMultiplex, peerFilterMultiplex
 }
 
 func createSwitches(
 	config *cfg.Config,
-	transport p2p.Transport,
+	transportMultiplex MultiplexP2PTransport,
 	p2pMetrics *p2p.Metrics,
-	peerFilters []p2p.PeerFilterFunc,
+	peerFiltersMultiplex MultiplexPeerFilterFunc,
 	userScopeHashes []string,
 	multiplexMempoolReactor map[string]*mempl.Reactor,
 	multiplexBlockSyncReactor map[string]*p2p.Reactor,
@@ -570,6 +581,10 @@ func createSwitches(
 	switchMultiplex := make(MultiplexSwitch, len(userScopeHashes))
 
 	for _, userScopeHash := range userScopeHashes {
+
+		transport := transportMultiplex[userScopeHash]
+		peerFilters := peerFiltersMultiplex[userScopeHash]
+
 		blockSyncReactor,
 			stateSyncReactor,
 			consensusReactor,
@@ -633,12 +648,6 @@ func createSwitches(
 	return switchMultiplex, nil
 }
 
-// XXX:
-//
-// Passing []string is not enough to determine the subfolders structure, the
-// current implementation iterates through subfolders using the config and
-// *re-creates SHA256* hashes, which should not be necessary given a different
-// parameter set, e.g. adding the addressBookPaths to the method.
 func createAddressBooksAndSetOnSwitches(
 	config *cfg.Config,
 	userScopeHashes []string,
@@ -655,8 +664,6 @@ func createAddressBooksAndSetOnSwitches(
 	addressBookMultiplex := make(MultiplexAddressBook, len(userScopeHashes))
 	addressBookPaths := make(map[string]string, len(userScopeHashes))
 
-	// FIXME: instead of re-creating SHA256 hashes, the MultiplexFS can be used
-	// to retrieve the correct config files path per scope.
 	for _, userAddress := range config.GetAddresses() {
 		for _, scope := range config.UserScopes[userAddress] {
 			// Query scope hash from registry to avoid re-creating SHA256
@@ -821,7 +828,7 @@ func DefaultMultiplexNode(config *cfg.Config, logger log.Logger) (*NodeRegistry,
 	return NewMultiplexNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
+		//privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		PluralUserGenesisDocProviderFunc(config),

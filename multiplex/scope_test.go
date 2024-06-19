@@ -71,6 +71,13 @@ func TestMultiplexScopeRegistryGetScopeHash(t *testing.T) {
 	assert.Equal(t, mxtest.TestScopeHash, actualResult)
 }
 
+func TestMultiplexScopeRegistryGetAddress(t *testing.T) {
+	actualResult, err := testScopeRegistry.GetAddress(mxtest.TestScopeHash)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, actualResult, "address by scope hash should not be empty")
+	assert.Equal(t, mxtest.TestUserAddress, actualResult)
+}
+
 func TestMultiplexScopeRegistryGetScopeHashErrorNotExist(t *testing.T) {
 	testCases := map[string]string{
 		"incorrect address":                        "incorrect scope",

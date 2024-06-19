@@ -578,11 +578,12 @@ func NewNodeWithCliParams(ctx context.Context,
 func NewNodeWithServices(
 	config *cfg.Config,
 	genDoc *types.GenesisDoc,
-	privValidator types.PrivValidator,
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
-	transport *p2p.MultiplexTransport,
+
+	privValidator types.PrivValidator,
 	addrBook pex.AddrBook,
+	transport *p2p.MultiplexTransport,
 
 	sw *p2p.Switch,
 	eventBus *types.EventBus,
