@@ -13,6 +13,7 @@ type MultiplexServiceRegistry struct {
 
 	// stores all multiplex resources in memory
 	// TODO: benchmark and verify memory footprint
+	PrivValidators  MultiplexPrivValidator
 	AddressBooks    MultiplexAddressBook
 	ChainStates     MultiplexState
 	ConsensusStates MultiplexConsensus
@@ -23,15 +24,35 @@ type MultiplexServiceRegistry struct {
 	EventBuses      MultiplexEventBus
 	EventSwitches   MultiplexSwitch
 	Pruners         MultiplexPruner
+
+	Transports      MultiplexP2PTransport
+	PeerFilters     MultiplexPeerFilterFunc
+	ListenAddresses MultiplexServiceAddress
 }
 
 func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServices, error) {
-	if _, ok := mx.EventSwitches[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find event switch with scope hash %s", userScopeHash)
+
+	// This long conditions block validates that the service registry
+	// contains all the *required* multiplex entries corresponding to
+	// the userScopeHash that is requested.
+	//
+	// TODO:
+	// This can be extracted to a function `Validate()`
+
+	if _, ok := mx.PrivValidators[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find priv validator with scope hash %s", userScopeHash)
+	}
+
+	if _, ok := mx.AddressBooks[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find address book with scope hash %s", userScopeHash)
 	}
 
 	if _, ok := mx.ChainStates[userScopeHash]; !ok {
 		return nil, fmt.Errorf("could not find state with scope hash %s", userScopeHash)
+	}
+
+	if _, ok := mx.ConsensusStates[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find consensus state with scope hash %s", userScopeHash)
 	}
 
 	if _, ok := mx.StateStores[userScopeHash]; !ok {
@@ -42,16 +63,8 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 		return nil, fmt.Errorf("could not find state store with scope hash %s", userScopeHash)
 	}
 
-	if _, ok := mx.AddressBooks[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find address book with scope hash %s", userScopeHash)
-	}
-
 	if _, ok := mx.IndexerServices[userScopeHash]; !ok {
 		return nil, fmt.Errorf("could not find indexer services with scope hash %s", userScopeHash)
-	}
-
-	if _, ok := mx.ConsensusStates[userScopeHash]; !ok {
-		return nil, fmt.Errorf("could not find consensus state with scope hash %s", userScopeHash)
 	}
 
 	if _, ok := mx.AppConns[userScopeHash]; !ok {
@@ -62,8 +75,20 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 		return nil, fmt.Errorf("could not find event bus with scope hash %s", userScopeHash)
 	}
 
+	if _, ok := mx.EventSwitches[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find event switch with scope hash %s", userScopeHash)
+	}
+
 	if _, ok := mx.Pruners[userScopeHash]; !ok {
 		return nil, fmt.Errorf("could not find pruner with scope hash %s", userScopeHash)
+	}
+
+	if _, ok := mx.Transports[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find p2p transport with scope hash %s", userScopeHash)
+	}
+
+	if _, ok := mx.PeerFilters[userScopeHash]; !ok {
+		return nil, fmt.Errorf("could not find peer filter func with scope hash %s", userScopeHash)
 	}
 
 	if _, ok := mx.WaitStateSync[userScopeHash]; !ok {
@@ -74,16 +99,23 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 		return nil, fmt.Errorf("could not find blocksync status with scope hash %s", userScopeHash)
 	}
 
+	// We'll use the event switch to get reactor pointers
 	sw := mx.EventSwitches[userScopeHash]
+
+	privValidator := mx.PrivValidators[userScopeHash]
 	addrBook := mx.AddressBooks[userScopeHash]
-	indexerService := mx.IndexerServices[userScopeHash]
 	state := mx.ChainStates[userScopeHash]
 	consensusState := mx.ConsensusStates[userScopeHash]
+	stateStore := mx.StateStores[userScopeHash]
+	blockStore := mx.BlockStores[userScopeHash]
+	indexerService := mx.IndexerServices[userScopeHash]
 	proxyApp := mx.AppConns[userScopeHash]
 	eventBus := mx.EventBuses[userScopeHash]
 	pruner := mx.Pruners[userScopeHash]
-	stateStore := mx.StateStores[userScopeHash]
-	blockStore := mx.BlockStores[userScopeHash]
+	transport := mx.Transports[userScopeHash]
+	peerFilters := mx.PeerFilters[userScopeHash]
+
+	// boolean flags
 	stateSync := mx.WaitStateSync[userScopeHash]
 	blockSync := mx.WaitBlockSync[userScopeHash]
 
@@ -92,18 +124,21 @@ func (mx *MultiplexServiceRegistry) getServices(userScopeHash string) (*NodeServ
 	evpool := (sw.Reactor("EVIDENCE").(*evidence.Reactor)).GetPoolPtr()
 
 	return &NodeServices{
-		addrBook:       addrBook,
 		sw:             sw.Switch,
-		eventBus:       eventBus,
-		indexerService: indexerService,
+		privValidator:  privValidator,
+		addrBook:       addrBook,
 		state:          &state.State,
 		consensusState: consensusState,
-		proxyApp:       proxyApp,
-		mempool:        mempool,
-		evidencePool:   evpool,
 		stateStore:     stateStore,
 		blockStore:     blockStore.BlockStore,
+		indexerService: indexerService,
+		proxyApp:       proxyApp,
+		eventBus:       eventBus,
+		mempool:        mempool,
+		evidencePool:   evpool,
 		pruner:         pruner,
+		transport:      transport,
+		peerFilters:    peerFilters,
 		stateSync:      stateSync,
 		blockSync:      blockSync,
 	}, nil

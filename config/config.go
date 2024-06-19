@@ -157,6 +157,19 @@ func (cfg *Config) SetRoot(root string) *Config {
 	return cfg
 }
 
+func (cfg *Config) SetListenAddresses(
+	p2pListenAddr string,
+	rpcListenAddr string,
+	grpcListenAddr string,
+	grpcPrivListenAddr string,
+) *Config {
+	cfg.P2P.ListenAddress = p2pListenAddr
+	cfg.RPC.ListenAddress = rpcListenAddr
+	cfg.GRPC.ListenAddress = grpcListenAddr
+	cfg.GRPC.Privileged.ListenAddress = grpcPrivListenAddr
+	return cfg
+}
+
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *Config) ValidateBasic() error {

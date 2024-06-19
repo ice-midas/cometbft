@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -93,6 +94,16 @@ func (r *ScopeRegistry) GetScopeHash(
 	}
 
 	return r.UsersScopes[userAddress][scope], nil
+}
+
+func (r *ScopeRegistry) GetAddress(scopeHash string) (string, error) {
+	for userAddress, hashes := range r.ScopeHashes {
+		if slices.Contains(hashes, scopeHash) {
+			return userAddress, nil
+		}
+	}
+
+	return "", fmt.Errorf("no address found for scope hash %s", scopeHash)
 }
 
 // ----------------------------------------------------------------------------

@@ -52,6 +52,9 @@ type MultiplexIndexerService map[string]*txindex.IndexerService
 // ----------------------------------------------------------------------------
 // SERVICES
 
+// MultiplexPrivValidator maps scope hashes to priv validators
+type MultiplexPrivValidator map[string]types.PrivValidator
+
 // MultiplexSwitch maps scope hashes to P2P event switches
 type MultiplexSwitch map[string]*ScopedSwitch
 
@@ -84,3 +87,15 @@ type MultiplexEvidenceReactor map[string]*evidence.Reactor
 
 // MultiplexMempoolReactor maps scope hashes to mempool reactors
 type MultiplexMempoolReactor map[string]*mempl.Reactor
+
+// ----------------------------------------------------------------------------
+// P2P
+
+// MultiplexServiceAddress maps scope hashes to service address maps
+type MultiplexServiceAddress map[string]map[string]string
+
+// MultiplexP2PTransport maps scope hashes to p2p multiplex transports
+type MultiplexP2PTransport map[string]*p2p.MultiplexTransport
+
+// MultiplexPeerFilterFunc maps scope hashes to one or many peer filter functions
+type MultiplexPeerFilterFunc map[string][]p2p.PeerFilterFunc
