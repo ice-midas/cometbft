@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 	cmttest "github.com/cometbft/cometbft/internal/test"
 )
@@ -34,6 +36,8 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 		userScopes,
 	)
 
+	baseConfig.RootDir = rootDir
+
 	// XXX:
 	// This is not optimal as it is possible that undesired config will
 	// be overwritten ; at best we should replace the EnsureRoot call
@@ -54,6 +58,9 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 		var testGenesis string
 		if len(userScopes) == 0 {
 			testGenesis = fmt.Sprintf(testUserGenesisFmt, TestUserAddress, TestScope, chainID)
+
+			// We overwrite the default priv validator files
+			cmttest.ResetTestPrivValidator(rootDir, baseConfig)
 		} else {
 			testGenesis = `[`
 			for i, scopeDesc := range baseConfig.GetScopes() {
@@ -64,6 +71,9 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 				perUserChainID := chainID + "-" + strconv.Itoa(i)
 				scopedTestGenesis := fmt.Sprintf(testOneScopedGenesisFmt, userAddress, scope, perUserChainID)
 				testGenesis += scopedTestGenesis + ","
+
+				// resets priv validators to default state/key (as present in genesis)
+				ResetMultiplexPrivValidators(baseConfig, userAddress, scope)
 			}
 
 			// Removes last comma and closes json array
@@ -75,11 +85,41 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 
 	// XXX TBI: put singular genesis docs inside scoped subfolders?
 
-	// We always overwrite the priv val
-	cmttest.ResetTestPrivValidator(rootDir, baseConfig)
-
 	conf := config.MultiplexTestConfig(baseConfig.Replication, userScopes).SetRoot(rootDir)
 	return conf
+}
+
+func ResetMultiplexPrivValidators(cfg config.BaseConfig, userAddress string, scope string) {
+
+	scopeHash := CreateScopeHash(fmt.Sprintf("%s:%s", userAddress, scope))
+	scopeFingerprint := CreateFingerprint(scopeHash)
+
+	userConfDir := filepath.Join(cfg.RootDir, config.DefaultConfigDir, userAddress)
+	userDataDir := filepath.Join(cfg.RootDir, config.DefaultDataDir, userAddress)
+
+	folderName := scopeFingerprint
+	privValKeyDir := filepath.Join(userConfDir, folderName)
+	privValStateDir := filepath.Join(userDataDir, folderName)
+
+	privValKeyFile := filepath.Join(privValKeyDir, filepath.Base(cfg.PrivValidatorKeyFile()))
+	privValStateFile := filepath.Join(privValStateDir, filepath.Base(cfg.PrivValidatorStateFile()))
+
+	// fmt.Printf("Resetting priv validator key file: %s\n", privValKeyFile)
+	// fmt.Printf("Resetting priv validator state file: %s\n", privValStateFile)
+
+	// XXX careful this uses always the same priv validator, if a change is made to
+	//     it, please also update the genesis.validators option.
+	cmttest.ResetTestPrivValidatorFiles(privValKeyFile, privValStateFile)
+}
+
+func CreateScopeHash(scopeDesc string) string {
+	sum256 := tmhash.Sum([]byte(scopeDesc))
+	return strings.ToUpper(hex.EncodeToString(sum256))
+}
+
+func CreateFingerprint(scopeHash string) string {
+	hashBytes, _ := hex.DecodeString(scopeHash)
+	return strings.ToUpper(hex.EncodeToString(hashBytes[:8]))
 }
 
 // TestScopeHash is a SHA256 of "user_address:scope" with TestUserAddress and scope "Default"
