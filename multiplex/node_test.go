@@ -90,7 +90,6 @@ func TestMultiplexNodeSingularReplicationFallbackWithEmptyScopes(t *testing.T) {
 	r, err := NewMultiplexNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		PluralUserGenesisDocProviderFunc(config),
@@ -121,7 +120,6 @@ func TestMultiplexNodePluralReplicationConfig(t *testing.T) {
 	r, err := NewMultiplexNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		PluralUserGenesisDocProviderFunc(config),
@@ -163,7 +161,6 @@ func TestMultiplexNodePluralReplicationConfigWithManyNodes(t *testing.T) {
 	r, err := NewMultiplexNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		PluralUserGenesisDocProviderFunc(config),
@@ -181,7 +178,7 @@ func TestMultiplexNodePluralReplicationConfigWithManyNodes(t *testing.T) {
 func TestMultiplexNodeDefaultMultiplexNode(t *testing.T) {
 
 	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
-		"mx_node_default_multiplex_node_start_stop",
+		"mx_node_default_multiplex_node",
 		"",
 		map[string][]string{
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
@@ -200,13 +197,17 @@ func TestMultiplexNodeDefaultMultiplexNode(t *testing.T) {
 func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
 
 	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
-		"mx_node_default_multiplex_node_start_stop",
+		"mx_node_default_multiplex_node_single_start_stop",
 		"",
 		map[string][]string{
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
 		},
 	)
 	defer os.RemoveAll(config.RootDir)
+
+	// Uses a singleton scope registry to create SHA256 once
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	require.NoError(t, err)
 
 	// create node registry
 	r, err := DefaultMultiplexNode(config, log.TestingLogger())
@@ -220,6 +221,9 @@ func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
 	// Tries to start/stop nodes SEQUENTIALLY
 	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 	for _, n := range r.Nodes {
+		userAddress, err := scopeRegistry.GetAddress(n.ScopeHash)
+		require.NoError(t, err)
+
 		wg.Add(1)
 		t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
 
@@ -231,6 +235,8 @@ func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
 		t.Logf("Using walFile: %s", walFile)
 		n.Config().Consensus.SetWalFile(walFile)
 
+		// We reset the PrivValidator for every node and consensus reactors
+		useDefaultTestPrivValidator(t, n, config, userAddress)
 		assertStartStopScopedNode(t, &wg, n)
 	}
 
@@ -240,7 +246,7 @@ func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
 func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
 
 	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
-		"mx_node_default_multiplex_node_start_stop",
+		"mx_node_default_multiplex_node_multiple_start_stop",
 		"",
 		map[string][]string{
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
@@ -252,6 +258,10 @@ func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
 	defer os.RemoveAll(config.RootDir)
 
 	expectedNumChains := 5
+
+	// Uses a singleton scope registry to create SHA256 once
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	require.NoError(t, err)
 
 	// create node registry
 	r, err := DefaultMultiplexNode(config, log.TestingLogger())
@@ -265,6 +275,9 @@ func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
 	// Tries to start/stop nodes SEQUENTIALLY
 	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 	for _, n := range r.Nodes {
+		userAddress, err := scopeRegistry.GetAddress(n.ScopeHash)
+		require.NoError(t, err)
+
 		wg.Add(1)
 		t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
 
@@ -277,40 +290,169 @@ func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
 		t.Logf("Using walFile: %s", walFile)
 		n.Config().Consensus.SetWalFile(walFile)
 
-		// We always reset PrivValidator because it's not multiplexed yet
-		// and we overwrite it on the node instance to empty its' state
-		cmttest.ResetTestPrivValidator(config.RootDir, config.BaseConfig)
-
-		resetPrivValidator(t, n, config)
+		// We reset the PrivValidator for every node and consensus reactors
+		useDefaultTestPrivValidator(t, n, config, userAddress)
 		assertStartStopScopedNode(t, &wg, n)
 	}
 
 	wg.Wait()
 }
 
-// XXX TestMultiplexNodeCreatesMultipleAddressBooks
-// XXX TestMultiplexNodeCreatesMultipleWalFiles
-// XXX TestMultiplexNodeCreatesMultipleWalFiles
+func TestMultiplexNodeComplexConfigStartStopSequential(t *testing.T) {
 
-func resetPrivValidator(t *testing.T, n *ScopedNode, config *cfg.Config) {
+	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
+		"mx_node_default_multiplex_node_complex_start_stop",
+		"",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "Other"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default", "ReplChain", "Third", "Fourth", "Fifth"},
+			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ReplChain", "Default"},
+			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"First", "Second"},
+		},
+	)
+	defer os.RemoveAll(config.RootDir)
+
+	expectedNumChains := 12
+
+	// Uses a singleton scope registry to create SHA256 once
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	require.NoError(t, err)
+
+	// create node registry
+	r, err := DefaultMultiplexNode(config, log.TestingLogger())
+	require.NoError(t, err)
+	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
+	assert.Equal(t, expectedNumChains, len(r.Nodes), "the registry should contain correct number of nodes")
+	assert.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+	var wg sync.WaitGroup
+
+	// Tries to start/stop nodes SEQUENTIALLY
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+	for _, n := range r.Nodes {
+		userAddress, err := scopeRegistry.GetAddress(n.ScopeHash)
+		require.NoError(t, err)
+
+		wg.Add(1)
+		t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
+
+		walFolder := n.ScopeHash[:16] // uses hex
+
+		// Overwrite wal file on a per-node basis
+		walFile := filepath.Join(baseDataDir, "cs.wal", walFolder, "wal")
+
+		// We overwrite the wal file to allow parallel I/O for multiple nodes
+		t.Logf("Using walFile: %s", walFile)
+		n.Config().Consensus.SetWalFile(walFile)
+
+		// We reset the PrivValidator for every node and consensus reactors
+		useDefaultTestPrivValidator(t, n, config, userAddress)
+		assertStartStopScopedNode(t, &wg, n)
+	}
+
+	wg.Wait()
+}
+
+// ----------------------------------------------------------------------------
+// Benchmarks
+
+func BenchmarkMultiplexNodeSequentialStartStopTwoChains(t *testing.B) {
+	t.ResetTimer()
+	for i := 0; i < t.N; i++ {
+		// Stop timer until nodes initialized:
+		// - Node config not timed
+		// - SHA256 generation not timed
+		// - Node service instances not timed
+		t.StopTimer()
+
+		// Reset the node configuration  files
+		config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(
+			"mx_bench_node_default_multiplex_node_sequential_start_stop",
+			"",
+			map[string][]string{
+				"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "Other"},
+			},
+		)
+		defer os.RemoveAll(config.RootDir)
+
+		requiredNumChains := 2
+
+		// Uses a singleton scope registry to create SHA256 once per iteration
+		scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+		require.NoError(t, err)
+
+		baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+
+		// Create node registry
+		r, err := DefaultMultiplexNode(config, log.TestingLogger())
+		require.NoError(t, err)
+		require.NotEmpty(t, r.Nodes, "the registry should not be empty")
+		require.Equal(t, requiredNumChains, len(r.Nodes), "the registry should contain correct number of nodes")
+		require.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+		// Start timer to benchmark node's start/stop
+		t.StartTimer()
+
+		// Reset wait group for every iteration
+		var wg sync.WaitGroup
+
+		// Benchmarks the start/stop of multiple nodes every iteration
+		for _, n := range r.Nodes {
+			userAddress, err := scopeRegistry.GetAddress(n.ScopeHash)
+			require.NoError(t, err)
+
+			wg.Add(1)
+			t.Logf("Starting new node: %s - %s", n.ScopeHash, n.GenesisDoc().ChainID)
+
+			// Overwrite wal file on a per-node basis
+			walFolder := n.ScopeHash[:16] // uses hex
+			walFile := filepath.Join(baseDataDir, "cs.wal", walFolder, "wal")
+
+			// We overwrite the wal file to allow parallel I/O for multiple nodes
+			n.Config().Consensus.SetWalFile(walFile)
+
+			// We reset the PrivValidator for every node and consensus reactors
+			useDefaultTestPrivValidator(t, n, config, userAddress)
+			assertStartStopScopedNode(t, &wg, n)
+		}
+
+		// Wait for the multiple nodes to execute their `wg.Done()` call
+		wg.Wait()
+	}
+}
+
+// ----------------------------------------------------------------------------
+
+func useDefaultTestPrivValidator(t testing.TB, n *ScopedNode, config *cfg.Config, userAddress string) {
 	t.Helper()
 
-	newPV := privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile())
+	scopeId := NewScopeIDFromHash(n.ScopeHash)
+	userConfDir := filepath.Join(config.RootDir, cfg.DefaultConfigDir, userAddress)
+	userDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir, userAddress)
+
+	folderName := scopeId.Fingerprint()
+	privValKeyDir := filepath.Join(userConfDir, folderName)
+	privValStateDir := filepath.Join(userDataDir, folderName)
+
+	privValKeyFile := filepath.Join(privValKeyDir, filepath.Base(config.PrivValidatorKeyFile()))
+	privValStateFile := filepath.Join(privValStateDir, filepath.Base(config.PrivValidatorStateFile()))
+
+	// Reload the priv validator from files. This overwrite the PrivValidator
+	// so that it uses the default privval that is also listed in the genesis.
+	newPV := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile)
+	//fmt.Printf("Using priv validator from files: %s\n", newPV.GetAddress())
+
 	n.SetPrivValidator(newPV)
 
 	consensusReactor := n.Switch().Reactor("CONSENSUS").(*cs.Reactor)
 	consensusReactor.SetPrivValidator(newPV)
 }
 
-func assertStartStopScopedNode(t *testing.T, wg *sync.WaitGroup, n *ScopedNode) {
+func assertStartStopScopedNode(t testing.TB, wg *sync.WaitGroup, n *ScopedNode) {
 	t.Helper()
 
 	err := n.Start()
 	require.NoError(t, err)
-
-	t.Logf("Started node %v", n.NodeInfo())
-	t.Logf("ScopeHash %s", n.ScopeHash)
-	t.Logf("ChainID: %s", n.GenesisDoc().ChainID)
 
 	// wait for the node to produce a block
 	blocksSub, err := n.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
@@ -318,8 +460,10 @@ func assertStartStopScopedNode(t *testing.T, wg *sync.WaitGroup, n *ScopedNode) 
 	select {
 	case <-blocksSub.Out():
 	case <-blocksSub.Canceled():
+		wg.Done()
 		t.Fatal("blocksSub was canceled")
 	case <-time.After(10 * time.Second):
+		wg.Done()
 		t.Fatal("timed out waiting for the node to produce a block")
 	}
 
@@ -340,7 +484,7 @@ func assertStartStopScopedNode(t *testing.T, wg *sync.WaitGroup, n *ScopedNode) 
 		}
 		err = p.Signal(syscall.SIGABRT)
 		fmt.Println(err)
-		t.Fatal("timed out waiting for shutdown")
 		wg.Done()
+		t.Fatal("timed out waiting for shutdown")
 	}
 }
