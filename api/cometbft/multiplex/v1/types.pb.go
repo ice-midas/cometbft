@@ -130,25 +130,80 @@ func (m *ScopedChainInfo) GetChainID() string {
 	return ""
 }
 
+// ScopedListenAddr contains a scope hash and a listen address
+type ScopedListenAddr struct {
+	ScopeHash  string `protobuf:"bytes,1,opt,name=scope_hash,json=scopeHash,proto3" json:"scope_hash,omitempty"`
+	ListenAddr string `protobuf:"bytes,2,opt,name=listen_addr,json=listenAddr,proto3" json:"listen_addr,omitempty"`
+}
+
+func (m *ScopedListenAddr) Reset()         { *m = ScopedListenAddr{} }
+func (m *ScopedListenAddr) String() string { return proto.CompactTextString(m) }
+func (*ScopedListenAddr) ProtoMessage()    {}
+func (*ScopedListenAddr) Descriptor() ([]byte, []int) {
+	return fileDescriptor_760696ebd5cddee0, []int{2}
+}
+func (m *ScopedListenAddr) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ScopedListenAddr) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ScopedListenAddr.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ScopedListenAddr) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ScopedListenAddr.Merge(m, src)
+}
+func (m *ScopedListenAddr) XXX_Size() int {
+	return m.Size()
+}
+func (m *ScopedListenAddr) XXX_DiscardUnknown() {
+	xxx_messageInfo_ScopedListenAddr.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ScopedListenAddr proto.InternalMessageInfo
+
+func (m *ScopedListenAddr) GetScopeHash() string {
+	if m != nil {
+		return m.ScopeHash
+	}
+	return ""
+}
+
+func (m *ScopedListenAddr) GetListenAddr() string {
+	if m != nil {
+		return m.ListenAddr
+	}
+	return ""
+}
+
 // MultiNetworkNodeInfo is the node information exchanged between two
 // peers of a multi-network infra during the CometBFT P2P handshake.
 type MultiNetworkNodeInfo struct {
 	Scopes           []string                 `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	ProtocolVersions []*ScopedProtocolVersion `protobuf:"bytes,2,rep,name=protocol_versions,json=protocolVersions,proto3" json:"protocol_versions,omitempty"`
 	Networks         []*ScopedChainInfo       `protobuf:"bytes,3,rep,name=networks,proto3" json:"networks,omitempty"`
-	DefaultNodeID    string                   `protobuf:"bytes,4,opt,name=default_node_id,json=defaultNodeId,proto3" json:"default_node_id,omitempty"`
-	ListenAddr       string                   `protobuf:"bytes,5,opt,name=listen_addr,json=listenAddr,proto3" json:"listen_addr,omitempty"`
-	Version          string                   `protobuf:"bytes,6,opt,name=version,proto3" json:"version,omitempty"`
-	Channels         []byte                   `protobuf:"bytes,7,opt,name=channels,proto3" json:"channels,omitempty"`
-	Moniker          string                   `protobuf:"bytes,8,opt,name=moniker,proto3" json:"moniker,omitempty"`
-	Other            v1.DefaultNodeInfoOther  `protobuf:"bytes,9,opt,name=other,proto3" json:"other"`
+	ListenAddrs      []*ScopedListenAddr      `protobuf:"bytes,4,rep,name=listen_addrs,json=listenAddrs,proto3" json:"listen_addrs,omitempty"`
+	RPCAddresses     []*ScopedListenAddr      `protobuf:"bytes,5,rep,name=rpc_addrs,json=rpcAddrs,proto3" json:"rpc_addrs,omitempty"`
+	DefaultNodeID    string                   `protobuf:"bytes,6,opt,name=default_node_id,json=defaultNodeId,proto3" json:"default_node_id,omitempty"`
+	ListenAddr       string                   `protobuf:"bytes,7,opt,name=listen_addr,json=listenAddr,proto3" json:"listen_addr,omitempty"`
+	Version          string                   `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`
+	Channels         []byte                   `protobuf:"bytes,9,opt,name=channels,proto3" json:"channels,omitempty"`
+	Moniker          string                   `protobuf:"bytes,10,opt,name=moniker,proto3" json:"moniker,omitempty"`
+	Other            v1.DefaultNodeInfoOther  `protobuf:"bytes,11,opt,name=other,proto3" json:"other"`
 }
 
 func (m *MultiNetworkNodeInfo) Reset()         { *m = MultiNetworkNodeInfo{} }
 func (m *MultiNetworkNodeInfo) String() string { return proto.CompactTextString(m) }
 func (*MultiNetworkNodeInfo) ProtoMessage()    {}
 func (*MultiNetworkNodeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_760696ebd5cddee0, []int{2}
+	return fileDescriptor_760696ebd5cddee0, []int{3}
 }
 func (m *MultiNetworkNodeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -198,6 +253,20 @@ func (m *MultiNetworkNodeInfo) GetNetworks() []*ScopedChainInfo {
 	return nil
 }
 
+func (m *MultiNetworkNodeInfo) GetListenAddrs() []*ScopedListenAddr {
+	if m != nil {
+		return m.ListenAddrs
+	}
+	return nil
+}
+
+func (m *MultiNetworkNodeInfo) GetRPCAddresses() []*ScopedListenAddr {
+	if m != nil {
+		return m.RPCAddresses
+	}
+	return nil
+}
+
 func (m *MultiNetworkNodeInfo) GetDefaultNodeID() string {
 	if m != nil {
 		return m.DefaultNodeID
@@ -243,44 +312,49 @@ func (m *MultiNetworkNodeInfo) GetOther() v1.DefaultNodeInfoOther {
 func init() {
 	proto.RegisterType((*ScopedProtocolVersion)(nil), "cometbft.multiplex.v1.ScopedProtocolVersion")
 	proto.RegisterType((*ScopedChainInfo)(nil), "cometbft.multiplex.v1.ScopedChainInfo")
+	proto.RegisterType((*ScopedListenAddr)(nil), "cometbft.multiplex.v1.ScopedListenAddr")
 	proto.RegisterType((*MultiNetworkNodeInfo)(nil), "cometbft.multiplex.v1.MultiNetworkNodeInfo")
 }
 
 func init() { proto.RegisterFile("cometbft/multiplex/v1/types.proto", fileDescriptor_760696ebd5cddee0) }
 
 var fileDescriptor_760696ebd5cddee0 = []byte{
-	// 487 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x53, 0x41, 0x6f, 0xd3, 0x30,
-	0x18, 0x6d, 0xd6, 0xad, 0x6d, 0x5c, 0xa6, 0x6e, 0xd6, 0x86, 0xac, 0x22, 0xd2, 0x50, 0x89, 0x29,
-	0x07, 0x94, 0xa8, 0x45, 0x42, 0xe2, 0xb8, 0xd2, 0x03, 0x13, 0x62, 0x4c, 0x41, 0x42, 0xc0, 0x25,
-	0x4a, 0x6b, 0xb7, 0x89, 0x96, 0xda, 0x56, 0xec, 0x16, 0x38, 0xf3, 0x07, 0xf8, 0x41, 0xfc, 0x80,
-	0x1d, 0x77, 0xe4, 0x54, 0xa1, 0xf4, 0x8f, 0x20, 0xdb, 0x6d, 0x34, 0x4a, 0xc5, 0x6e, 0x79, 0xfe,
-	0xde, 0x7b, 0xfe, 0xbe, 0xe7, 0x2f, 0xe0, 0xc9, 0x98, 0xcd, 0x88, 0x1c, 0x4d, 0x64, 0x30, 0x9b,
-	0x67, 0x32, 0xe5, 0x19, 0xf9, 0x1a, 0x2c, 0x7a, 0x81, 0xfc, 0xc6, 0x89, 0xf0, 0x79, 0xce, 0x24,
-	0x83, 0xa7, 0x1b, 0x8a, 0x5f, 0x52, 0xfc, 0x45, 0xaf, 0x7d, 0x32, 0x65, 0x53, 0xa6, 0x19, 0x81,
-	0xfa, 0x32, 0xe4, 0xf6, 0xa3, 0xd2, 0x8f, 0xf7, 0xf9, 0x96, 0x53, 0xf7, 0xbb, 0x05, 0x4e, 0xdf,
-	0x8f, 0x19, 0x27, 0xf8, 0x4a, 0xe1, 0x31, 0xcb, 0x3e, 0x90, 0x5c, 0xa4, 0x8c, 0xc2, 0xc7, 0x00,
-	0x08, 0x55, 0x88, 0x92, 0x58, 0x24, 0xc8, 0x72, 0x2d, 0xcf, 0x0e, 0x6d, 0x7d, 0xf2, 0x3a, 0x16,
-	0x09, 0x7c, 0x03, 0x8e, 0xf8, 0x5a, 0x11, 0x2d, 0x8c, 0x04, 0xed, 0xb9, 0x96, 0xd7, 0xec, 0xbb,
-	0x7e, 0xd9, 0x1d, 0xef, 0x73, 0x7f, 0xd1, 0xf3, 0xb7, 0xac, 0xc3, 0x16, 0xff, 0xfb, 0xa0, 0xfb,
-	0x11, 0xb4, 0x4c, 0x13, 0xaf, 0x92, 0x38, 0xa5, 0x17, 0x74, 0xc2, 0xee, 0xbb, 0xfe, 0x0c, 0x34,
-	0xc6, 0x8a, 0x1b, 0xa5, 0x58, 0x5f, 0x6b, 0x0f, 0x9a, 0xc5, 0xb2, 0x53, 0x37, 0xfa, 0x61, 0x58,
-	0xd7, 0xc5, 0x0b, 0xdc, 0xfd, 0x59, 0x05, 0x27, 0x6f, 0x55, 0x46, 0x97, 0x44, 0x7e, 0x61, 0xf9,
-	0xf5, 0x25, 0xc3, 0x44, 0xfb, 0x3f, 0x04, 0x35, 0xed, 0x26, 0x90, 0xe5, 0x56, 0x3d, 0x3b, 0x5c,
-	0x23, 0xf8, 0x09, 0x1c, 0x6f, 0xcf, 0x25, 0xd0, 0x9e, 0x5b, 0xf5, 0x9a, 0xfd, 0x67, 0xfe, 0xce,
-	0xd8, 0xfd, 0x9d, 0xf9, 0x85, 0x47, 0x5b, 0x43, 0x0a, 0x38, 0x00, 0x0d, 0x6a, 0xba, 0x10, 0xa8,
-	0xaa, 0x1d, 0xcf, 0xfe, 0xeb, 0x58, 0x86, 0x11, 0x96, 0x3a, 0xf8, 0x12, 0xb4, 0x30, 0x99, 0xc4,
-	0xf3, 0x4c, 0x46, 0x94, 0x61, 0xa2, 0xc6, 0xdf, 0xd7, 0xe3, 0x1f, 0x17, 0xcb, 0xce, 0xe1, 0xd0,
-	0x94, 0xf4, 0x90, 0xc3, 0xf0, 0x10, 0xdf, 0x81, 0x18, 0x76, 0x40, 0x33, 0x4b, 0x85, 0x24, 0x34,
-	0x8a, 0x31, 0xce, 0xd1, 0x81, 0x8e, 0x14, 0x98, 0xa3, 0x73, 0x8c, 0x73, 0x88, 0x40, 0x7d, 0xf3,
-	0x92, 0x35, 0x5d, 0xdc, 0x40, 0xd8, 0xd6, 0x69, 0x53, 0x4a, 0x32, 0x81, 0xea, 0xae, 0xe5, 0x3d,
-	0x08, 0x4b, 0xac, 0x54, 0x33, 0x46, 0xd3, 0x6b, 0x92, 0xa3, 0x86, 0x51, 0xad, 0x21, 0x3c, 0x07,
-	0x07, 0x4c, 0x26, 0x24, 0x47, 0xb6, 0xde, 0x8b, 0xa7, 0xff, 0xec, 0xc5, 0xdd, 0x76, 0xe9, 0x84,
-	0xbd, 0x53, 0xe4, 0xc1, 0xfe, 0xcd, 0xb2, 0x53, 0x09, 0x8d, 0x72, 0x70, 0x75, 0x53, 0x38, 0xd6,
-	0x6d, 0xe1, 0x58, 0xbf, 0x0b, 0xc7, 0xfa, 0xb1, 0x72, 0x2a, 0xb7, 0x2b, 0xa7, 0xf2, 0x6b, 0xe5,
-	0x54, 0x3e, 0xbf, 0x98, 0xa6, 0x32, 0x99, 0x8f, 0x94, 0x67, 0x50, 0x2e, 0x78, 0xf9, 0x11, 0xf3,
-	0x34, 0xd8, 0xf9, 0x1b, 0x8d, 0x6a, 0xfa, 0x59, 0x9e, 0xff, 0x09, 0x00, 0x00, 0xff, 0xff, 0x59,
-	0x37, 0x54, 0x13, 0x66, 0x03, 0x00, 0x00,
+	// 551 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x94, 0xcf, 0x6f, 0xda, 0x30,
+	0x14, 0xc7, 0x49, 0xa1, 0x40, 0x1c, 0x2a, 0x68, 0xd4, 0x4e, 0x11, 0xd3, 0x42, 0x86, 0xb4, 0x8e,
+	0xc3, 0x94, 0x08, 0x26, 0x4d, 0xda, 0xb1, 0x94, 0xc3, 0xba, 0x1f, 0x1d, 0xf2, 0xa4, 0x6a, 0xdb,
+	0x05, 0x85, 0xd8, 0x90, 0xa8, 0x21, 0xb6, 0xe2, 0xc0, 0xb6, 0xf3, 0xfe, 0x81, 0xfd, 0x59, 0x3d,
+	0xf6, 0xb8, 0x13, 0xaa, 0xc2, 0x3f, 0x32, 0xd9, 0x86, 0x94, 0x65, 0xa8, 0xd5, 0x6e, 0x7e, 0x7e,
+	0xef, 0xfb, 0xf1, 0xcb, 0xfb, 0xda, 0x01, 0x4f, 0x3d, 0x32, 0xc3, 0xc9, 0x78, 0x92, 0x38, 0xb3,
+	0x79, 0x98, 0x04, 0x34, 0xc4, 0xdf, 0x9d, 0x45, 0xd7, 0x49, 0x7e, 0x50, 0xcc, 0x6c, 0x1a, 0x93,
+	0x84, 0xe8, 0xc7, 0x9b, 0x12, 0x3b, 0x2b, 0xb1, 0x17, 0xdd, 0xe6, 0xd1, 0x94, 0x4c, 0x89, 0xa8,
+	0x70, 0xf8, 0x4a, 0x16, 0x37, 0x1f, 0x67, 0x3c, 0xda, 0xa3, 0x39, 0x52, 0xfb, 0xa7, 0x02, 0x8e,
+	0x3f, 0x79, 0x84, 0x62, 0x34, 0xe4, 0xb1, 0x47, 0xc2, 0x4b, 0x1c, 0xb3, 0x80, 0x44, 0xfa, 0x13,
+	0x00, 0x18, 0x4f, 0x8c, 0x7c, 0x97, 0xf9, 0x86, 0x62, 0x29, 0x1d, 0x15, 0xaa, 0x62, 0xe7, 0x8d,
+	0xcb, 0x7c, 0xfd, 0x1d, 0x68, 0xd0, 0xb5, 0x62, 0xb4, 0x90, 0x12, 0x63, 0xcf, 0x52, 0x3a, 0x5a,
+	0xcf, 0xb2, 0xb3, 0xee, 0x68, 0x8f, 0xda, 0x8b, 0xae, 0x9d, 0x43, 0xc3, 0x3a, 0xfd, 0x7b, 0xa3,
+	0xfd, 0x19, 0xd4, 0x65, 0x13, 0x67, 0xbe, 0x1b, 0x44, 0xe7, 0xd1, 0x84, 0x3c, 0x74, 0xfc, 0x09,
+	0xa8, 0x7a, 0xbc, 0x76, 0x14, 0x20, 0x71, 0xac, 0xda, 0xd7, 0xd2, 0x65, 0xab, 0x22, 0xf5, 0x03,
+	0x58, 0x11, 0xc9, 0x73, 0xd4, 0x86, 0xa0, 0x21, 0xc9, 0xef, 0x03, 0x96, 0xe0, 0xe8, 0x14, 0xa1,
+	0xf8, 0x21, 0x74, 0x0b, 0x68, 0xa1, 0x28, 0x1e, 0xb9, 0x08, 0xc5, 0x92, 0x0e, 0x41, 0x98, 0xe9,
+	0xdb, 0xb7, 0x25, 0x70, 0xf4, 0x81, 0xcf, 0xfd, 0x02, 0x27, 0xdf, 0x48, 0x7c, 0x75, 0x41, 0x10,
+	0x16, 0x3d, 0x3f, 0x02, 0x65, 0x81, 0x61, 0x86, 0x62, 0x15, 0x3b, 0x2a, 0x5c, 0x47, 0xfa, 0x17,
+	0x70, 0x98, 0x9f, 0x15, 0x33, 0xf6, 0xac, 0x62, 0x47, 0xeb, 0xbd, 0xb0, 0x77, 0x5a, 0x69, 0xef,
+	0xf4, 0x04, 0x36, 0x72, 0x83, 0x63, 0x7a, 0x1f, 0x54, 0x23, 0xd9, 0x05, 0x33, 0x8a, 0x82, 0x78,
+	0x72, 0x2f, 0x31, 0x1b, 0x30, 0xcc, 0x74, 0xfa, 0x5b, 0x50, 0xdb, 0xfa, 0x60, 0x66, 0x94, 0x04,
+	0xe7, 0xf9, 0xbd, 0x9c, 0xbb, 0x71, 0x42, 0xed, 0x6e, 0x34, 0x4c, 0xbf, 0x04, 0x6a, 0x4c, 0xbd,
+	0x35, 0x68, 0xff, 0xbf, 0x40, 0xfd, 0x46, 0xba, 0x6c, 0xd5, 0xe0, 0xf0, 0x8c, 0x07, 0x98, 0x31,
+	0xcc, 0x60, 0x35, 0xa6, 0x9e, 0xe4, 0xbe, 0x06, 0x75, 0x84, 0x27, 0xee, 0x3c, 0x4c, 0x46, 0x11,
+	0x41, 0x98, 0xdb, 0x5e, 0x16, 0xb6, 0x1f, 0xa6, 0xcb, 0xd6, 0xc1, 0x40, 0xa6, 0x84, 0x11, 0x03,
+	0x78, 0x80, 0xb6, 0x42, 0x94, 0xf7, 0xb3, 0x92, 0xf7, 0x53, 0x37, 0x40, 0x65, 0x73, 0x83, 0xab,
+	0x22, 0xb9, 0x09, 0xf5, 0xa6, 0xb8, 0x65, 0x51, 0x84, 0x43, 0x66, 0xa8, 0x96, 0xd2, 0xa9, 0xc1,
+	0x2c, 0xe6, 0xaa, 0x19, 0x89, 0x82, 0x2b, 0x1c, 0x1b, 0x40, 0xaa, 0xd6, 0xa1, 0x7e, 0x0a, 0xf6,
+	0x49, 0xe2, 0xe3, 0xd8, 0xd0, 0xc4, 0x7b, 0x78, 0xf6, 0xcf, 0x7b, 0xd8, 0x6e, 0x37, 0x9a, 0x90,
+	0x8f, 0xbc, 0xb8, 0x5f, 0xba, 0x5e, 0xb6, 0x0a, 0x50, 0x2a, 0xfb, 0xc3, 0xeb, 0xd4, 0x54, 0x6e,
+	0x52, 0x53, 0xb9, 0x4d, 0x4d, 0xe5, 0xd7, 0xca, 0x2c, 0xdc, 0xac, 0xcc, 0xc2, 0xef, 0x95, 0x59,
+	0xf8, 0xfa, 0x6a, 0x1a, 0x24, 0xfe, 0x7c, 0xcc, 0x99, 0x4e, 0xf6, 0xb0, 0xb3, 0x85, 0x4b, 0x03,
+	0x67, 0xe7, 0xef, 0x63, 0x5c, 0x16, 0x57, 0xe7, 0xe5, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe4,
+	0x59, 0x0a, 0xf2, 0x5e, 0x04, 0x00, 0x00,
 }
 
 func (m *ScopedProtocolVersion) Marshal() (dAtA []byte, err error) {
@@ -362,6 +436,43 @@ func (m *ScopedChainInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ScopedListenAddr) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ScopedListenAddr) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ScopedListenAddr) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.ListenAddr) > 0 {
+		i -= len(m.ListenAddr)
+		copy(dAtA[i:], m.ListenAddr)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.ListenAddr)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ScopeHash) > 0 {
+		i -= len(m.ScopeHash)
+		copy(dAtA[i:], m.ScopeHash)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.ScopeHash)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *MultiNetworkNodeInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -391,41 +502,69 @@ func (m *MultiNetworkNodeInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintTypes(dAtA, i, uint64(size))
 	}
 	i--
-	dAtA[i] = 0x4a
+	dAtA[i] = 0x5a
 	if len(m.Moniker) > 0 {
 		i -= len(m.Moniker)
 		copy(dAtA[i:], m.Moniker)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Moniker)))
 		i--
-		dAtA[i] = 0x42
+		dAtA[i] = 0x52
 	}
 	if len(m.Channels) > 0 {
 		i -= len(m.Channels)
 		copy(dAtA[i:], m.Channels)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Channels)))
 		i--
-		dAtA[i] = 0x3a
+		dAtA[i] = 0x4a
 	}
 	if len(m.Version) > 0 {
 		i -= len(m.Version)
 		copy(dAtA[i:], m.Version)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Version)))
 		i--
-		dAtA[i] = 0x32
+		dAtA[i] = 0x42
 	}
 	if len(m.ListenAddr) > 0 {
 		i -= len(m.ListenAddr)
 		copy(dAtA[i:], m.ListenAddr)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.ListenAddr)))
 		i--
-		dAtA[i] = 0x2a
+		dAtA[i] = 0x3a
 	}
 	if len(m.DefaultNodeID) > 0 {
 		i -= len(m.DefaultNodeID)
 		copy(dAtA[i:], m.DefaultNodeID)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.DefaultNodeID)))
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x32
+	}
+	if len(m.RPCAddresses) > 0 {
+		for iNdEx := len(m.RPCAddresses) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.RPCAddresses[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
+	if len(m.ListenAddrs) > 0 {
+		for iNdEx := len(m.ListenAddrs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.ListenAddrs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x22
+		}
 	}
 	if len(m.Networks) > 0 {
 		for iNdEx := len(m.Networks) - 1; iNdEx >= 0; iNdEx-- {
@@ -512,6 +651,23 @@ func (m *ScopedChainInfo) Size() (n int) {
 	return n
 }
 
+func (m *ScopedListenAddr) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ScopeHash)
+	if l > 0 {
+		n += 1 + l + sovTypes(uint64(l))
+	}
+	l = len(m.ListenAddr)
+	if l > 0 {
+		n += 1 + l + sovTypes(uint64(l))
+	}
+	return n
+}
+
 func (m *MultiNetworkNodeInfo) Size() (n int) {
 	if m == nil {
 		return 0
@@ -532,6 +688,18 @@ func (m *MultiNetworkNodeInfo) Size() (n int) {
 	}
 	if len(m.Networks) > 0 {
 		for _, e := range m.Networks {
+			l = e.Size()
+			n += 1 + l + sovTypes(uint64(l))
+		}
+	}
+	if len(m.ListenAddrs) > 0 {
+		for _, e := range m.ListenAddrs {
+			l = e.Size()
+			n += 1 + l + sovTypes(uint64(l))
+		}
+	}
+	if len(m.RPCAddresses) > 0 {
+		for _, e := range m.RPCAddresses {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
@@ -799,6 +967,120 @@ func (m *ScopedChainInfo) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ScopedListenAddr) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ScopedListenAddr: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ScopedListenAddr: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScopeHash", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ScopeHash = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ListenAddr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ListenAddr = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypes(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -930,6 +1212,74 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ListenAddrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ListenAddrs = append(m.ListenAddrs, &ScopedListenAddr{})
+			if err := m.ListenAddrs[len(m.ListenAddrs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RPCAddresses", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RPCAddresses = append(m.RPCAddresses, &ScopedListenAddr{})
+			if err := m.RPCAddresses[len(m.RPCAddresses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field DefaultNodeID", wireType)
 			}
 			var stringLen uint64
@@ -960,7 +1310,7 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.DefaultNodeID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 5:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ListenAddr", wireType)
 			}
@@ -992,7 +1342,7 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.ListenAddr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 6:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
 			}
@@ -1024,7 +1374,7 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.Version = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 7:
+		case 9:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Channels", wireType)
 			}
@@ -1058,7 +1408,7 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 				m.Channels = []byte{}
 			}
 			iNdEx = postIndex
-		case 8:
+		case 10:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Moniker", wireType)
 			}
@@ -1090,7 +1440,7 @@ func (m *MultiNetworkNodeInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.Moniker = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 9:
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Other", wireType)
 			}
