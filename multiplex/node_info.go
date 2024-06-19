@@ -28,18 +28,26 @@ type ScopedChainInfo struct {
 	ChainID   string `json:"chain_id"`
 }
 
+// ScopedListenAddr contains a scope hash and a listen address
+type ScopedListenAddr struct {
+	ScopeHash  string `json:"scope_hash"`
+	ListenAddr string `json:"listen_addr"`
+}
+
 // MultiNetworkNodeInfo is a multiplex node information exchanged
 // between two peers during the CometBFT P2P handshake.
 type MultiNetworkNodeInfo struct {
 	// Replication configuration
 	Scopes           []string                `json:"scopes"` // contains ScopeHash
 	ProtocolVersions []ScopedProtocolVersion `json:"protocol_versions"`
-	Networks         []ScopedChainInfo       `json:"networks"` // contains chainID
+	Networks         []ScopedChainInfo       `json:"networks"`     // contains chainID
+	ListenAddrs      []ScopedListenAddr      `json:"listen_addrs"` // accepting incoming
+	RPCAddresses     []ScopedListenAddr      `json:"rpc_addrs"`    // accepting RPC
 
 	// Authenticate
 	// TODO: replace with NetAddress
 	DefaultNodeID p2p.ID `json:"id"`          // authenticated identifier
-	ListenAddr    string `json:"listen_addr"` // accepting incoming
+	ListenAddr    string `json:"listen_addr"` // default accepting incoming (first network)
 
 	// Check compatibility.
 	// Channels are HexBytes so easier to read as JSON
@@ -66,10 +74,12 @@ var _ p2p.NodeInfo = MultiNetworkNodeInfo{}
 func (info MultiNetworkNodeInfo) Validate() error {
 	// ID is already validated.
 
-	// Validate ListenAddr.
-	_, err := p2p.NewNetAddressString(p2p.IDAddressString(info.ID(), info.ListenAddr))
-	if err != nil {
-		return err
+	// Validate all P2P listen addresses
+	for _, laddr := range info.ListenAddrs {
+		_, err := p2p.NewNetAddressString(p2p.IDAddressString(info.ID(), laddr.ListenAddr))
+		if err != nil {
+			return err
+		}
 	}
 
 	// Network is validated in CompatibleWith.
@@ -106,10 +116,15 @@ func (info MultiNetworkNodeInfo) Validate() error {
 	default:
 		return fmt.Errorf("info.Other.TxIndex should be either 'on', 'off', or empty string, got '%v'", txIndex)
 	}
-	// XXX: Should we be more strict about address formats?
-	rpcAddr := other.RPCAddress
-	if len(rpcAddr) > 0 && (!cmtstrings.IsASCIIText(rpcAddr) || cmtstrings.ASCIITrim(rpcAddr) == "") {
-		return fmt.Errorf("info.Other.RPCAddress=%v must be valid ASCII text without tabs", rpcAddr)
+
+	// Validate RPC addresses
+	for _, scopedRPCAddr := range info.RPCAddresses {
+		rpcAddr := scopedRPCAddr.ListenAddr
+
+		// XXX: Should we be more strict about address formats?
+		if len(rpcAddr) > 0 && (!cmtstrings.IsASCIIText(rpcAddr) || cmtstrings.ASCIITrim(rpcAddr) == "") {
+			return fmt.Errorf("info.Other.RPCAddress=%v must be valid ASCII text without tabs", rpcAddr)
+		}
 	}
 
 	return nil
@@ -208,8 +223,11 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 	}
 
 	dni := new(cmtmx.MultiNetworkNodeInfo)
+	dni.Scopes = make([]string, numReplicatedChains)
 	dni.ProtocolVersions = make([]*cmtmx.ScopedProtocolVersion, numReplicatedChains)
 	dni.Networks = make([]*cmtmx.ScopedChainInfo, numReplicatedChains)
+	dni.ListenAddrs = make([]*cmtmx.ScopedListenAddr, numReplicatedChains)
+	dni.RPCAddresses = make([]*cmtmx.ScopedListenAddr, numReplicatedChains)
 
 	for i, userScopeHash := range info.Scopes {
 
@@ -221,13 +239,25 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 			return n.ScopeHash == userScopeHash
 		})
 
+		laddrPos := slices.IndexFunc(info.ListenAddrs, func(a ScopedListenAddr) bool {
+			return a.ScopeHash == userScopeHash
+		})
+
+		rpcAddrPos := slices.IndexFunc(info.RPCAddresses, func(a ScopedListenAddr) bool {
+			return a.ScopeHash == userScopeHash
+		})
+
 		// Not being able to find a protocol version or network should never happen
-		if versionPos < 0 || networkPos < 0 {
+		if versionPos < 0 || networkPos < 0 || laddrPos < 0 {
 			panic(fmt.Sprintf("could not determine protocol version and network with scope hash %s ; Got %d versionPos and %d networkPos", userScopeHash, versionPos, networkPos))
 		}
 
 		protocolVersion := info.ProtocolVersions[versionPos]
 		network := info.Networks[networkPos]
+		laddr := info.ListenAddrs[laddrPos]
+		rpcAddr := info.RPCAddresses[rpcAddrPos]
+
+		dni.Scopes[i] = userScopeHash
 
 		dni.ProtocolVersions[i] = &cmtmx.ScopedProtocolVersion{
 			ScopeHash: userScopeHash,
@@ -241,6 +271,16 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 		dni.Networks[i] = &cmtmx.ScopedChainInfo{
 			ScopeHash: userScopeHash,
 			ChainID:   network.ChainID,
+		}
+
+		dni.ListenAddrs[i] = &cmtmx.ScopedListenAddr{
+			ScopeHash:  userScopeHash,
+			ListenAddr: laddr.ListenAddr,
+		}
+
+		dni.RPCAddresses[i] = &cmtmx.ScopedListenAddr{
+			ScopeHash:  userScopeHash,
+			ListenAddr: rpcAddr.ListenAddr,
 		}
 	}
 
