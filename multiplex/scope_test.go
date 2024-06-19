@@ -52,15 +52,15 @@ func TestMultiplexScopeIDTestFingerprint(t *testing.T) {
 	assert.Equal(t, actualFP, mxtest.TestScopeHash[:fingerprintSize*2])
 }
 
-func TestMultiplexScopeRegistryGetScopeHashes(t *testing.T) {
-	actualResult, err := testScopeRegistry.GetScopeHashes(mxtest.TestUserAddress)
+func TestMultiplexScopeRegistryGetScopeHashesByUser(t *testing.T) {
+	actualResult, err := testScopeRegistry.GetScopeHashesByUser(mxtest.TestUserAddress)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, actualResult, "scope slice by user should not be empty")
 	assert.Len(t, actualResult, 1)
 }
 
-func TestMultiplexScopeRegistryGetScopeHashesErrorNotExist(t *testing.T) {
-	_, err := testScopeRegistry.GetScopeHashes("incorrect address")
+func TestMultiplexScopeRegistryGetScopeHashesByUserErrorNotExist(t *testing.T) {
+	_, err := testScopeRegistry.GetScopeHashesByUser("incorrect address")
 	assert.Error(t, err)
 }
 

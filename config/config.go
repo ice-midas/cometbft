@@ -170,6 +170,15 @@ func (cfg *Config) SetListenAddresses(
 	return cfg
 }
 
+func (cfg *Config) GetListenAddresses() map[string]string {
+	return map[string]string{
+		"P2P":      cfg.P2P.ListenAddress,
+		"RPC":      cfg.RPC.ListenAddress,
+		"GRPC":     cfg.GRPC.ListenAddress,
+		"GRPCPriv": cfg.GRPC.Privileged.ListenAddress,
+	}
+}
+
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *Config) ValidateBasic() error {
@@ -226,6 +235,44 @@ func (cfg *Config) PossibleMisconfigurations() []string {
 		res = append(res, "[statesync] section: "+elem)
 	}
 	return res
+}
+
+// NewConfigCopy deep-copies a config pointer to create a new config object.
+func NewConfigCopy(cfg *Config) *Config {
+	// Re-allocate new config
+	next := &Config{
+		BaseConfig: BaseConfig{},
+		RPC:        &RPCConfig{},
+		// XXX *GRPCPruningServiceConfig
+		GRPC:            &GRPCConfig{},
+		P2P:             &P2PConfig{}, // XXX *FuzzConnConfig
+		Mempool:         &MempoolConfig{},
+		StateSync:       &StateSyncConfig{},
+		BlockSync:       &BlockSyncConfig{},
+		Consensus:       &ConsensusConfig{},
+		Storage:         &StorageConfig{}, // XXX *PruningConfig
+		TxIndex:         &TxIndexConfig{},
+		Instrumentation: &InstrumentationConfig{},
+	}
+
+	// Copy values from base
+	next.BaseConfig = cfg.BaseConfig
+	*next.RPC = *cfg.RPC
+	*next.GRPC = *cfg.GRPC
+	*next.P2P = *cfg.P2P
+	*next.Mempool = *cfg.Mempool
+	*next.StateSync = *cfg.StateSync
+	*next.BlockSync = *cfg.BlockSync
+	*next.Consensus = *cfg.Consensus
+	*next.Storage = *cfg.Storage
+	*next.TxIndex = *cfg.TxIndex
+	*next.Instrumentation = *cfg.Instrumentation
+
+	// .. and sub-pointers
+	next.GRPC.Privileged = &GRPCPrivilegedConfig{}
+	*next.GRPC.Privileged = *cfg.GRPC.Privileged
+
+	return next
 }
 
 // -----------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 package multiplex
 
 import (
+	"github.com/cometbft/cometbft/config"
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	"github.com/cometbft/cometbft/internal/evidence"
 	mempl "github.com/cometbft/cometbft/mempool"
@@ -18,6 +19,9 @@ import (
 
 // MultiplexFS maps scope hashes to filesystem paths (data/...)
 type MultiplexFS map[string]string
+
+// MultiplexNodeConfig maps scope hashes to configuration objects
+type MultiplexNodeConfig map[string]*config.Config
 
 // ----------------------------------------------------------------------------
 // DATABASE

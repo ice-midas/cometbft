@@ -3,8 +3,11 @@ package multiplex
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"testing"
@@ -74,6 +77,40 @@ func TestMultiplexNodeLegacyGenesis(t *testing.T) {
 
 	err = stateDB.Close()
 	require.NoError(t, err)
+}
+
+func TestMultiplexLegacyNodeStartAndProduceBlocks(t *testing.T) {
+	config, n := assertStartLegacyNode(t, "mx_node_legacy_start_and_produce")
+
+	// Shutdown routine
+	defer os.RemoveAll(config.RootDir)
+	defer func(cn *cmtnode.Node) {
+		_ = cn.Stop()
+	}(n)
+
+	maxBlocks := 5
+
+	// wait for the node to produce a block
+	blocksSub, err := n.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
+	require.NoError(t, err)
+
+	numBlocks := 0
+BLOCKS_LOOP:
+	for {
+		select {
+		case <-blocksSub.Out():
+			numBlocks++
+			if numBlocks == maxBlocks {
+				break BLOCKS_LOOP
+			}
+		case <-blocksSub.Canceled():
+			t.Fatal("blocksSub was canceled")
+			break BLOCKS_LOOP
+		case <-time.After(15 * time.Second):
+			t.Fatal("timed out waiting for the node to produce a block")
+			break BLOCKS_LOOP
+		}
+	}
 }
 
 func TestMultiplexNodeSingularReplicationFallbackWithEmptyScopes(t *testing.T) {
@@ -421,6 +458,123 @@ func BenchmarkMultiplexNodeSequentialStartStopTwoChains(t *testing.B) {
 	}
 }
 
+func BenchmarkMultiplexNodeTriggerConsensusSingleChain(t *testing.B) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_single_chain",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	// We shall create random ids to push many txes
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
+	mtx := sync.Mutex{}
+
+	t.SetParallelism(1000)
+	t.ResetTimer()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		for pb.Next() {
+			nodeRPC := "http://127.0.0.1:40001"
+
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999)
+			mtx.Unlock()
+
+			randomVal := strconv.Itoa(randomizeData)
+
+			txData := "test=value" + randomVal
+
+			t.Logf("Now broadcasting transaction: %s", txData)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
+}
+
+func BenchmarkMultiplexNodeTriggerConsensusTwoChains(t *testing.B) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_chains",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "Other"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	// We shall randomly pick a node index
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
+	mtx := sync.Mutex{}
+
+	t.SetParallelism(1000)
+	t.ResetTimer()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		// and broadcast it using a random node index from the list of nodes
+		for pb.Next() {
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999999)
+			mtx.Unlock()
+
+			randomVal := strconv.Itoa(randomizeData)
+			txData := "test=value" + randomVal
+
+			mtx.Lock()
+			rpcPort := randomizer.Intn(len(r.Nodes)) + 40001
+			mtx.Unlock()
+
+			nodeRPC := "http://127.0.0.1:" + strconv.Itoa(rpcPort)
+
+			t.Logf("Now broadcasting transaction: %s to %s", txData, nodeRPC)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
+}
+
+func BenchmarkMultiplexLegacyNodeConsensus(t *testing.B) {
+
+	config, n := assertStartLegacyNode(t, "mx_bench_node_legacy_node_consensus")
+
+	// Shutdown routine
+	defer func(cn *cmtnode.Node) {
+		defer os.RemoveAll(config.RootDir)
+		_ = cn.Stop()
+	}(n)
+
+	// We shall create random ids to push many txes
+	src := rand.NewSource(time.Now().Unix())
+	randomizer := rand.New(src)
+	mtx := sync.Mutex{}
+
+	// Every iteration should create a transaction with a random value
+	t.ResetTimer()
+	for i := 0; i < t.N; i++ {
+		mtx.Lock()
+		randomizeData := randomizer.Intn(999999)
+		mtx.Unlock()
+
+		randomId := strconv.Itoa(randomizeData)
+
+		t.Logf("Now broadcasting transaction: test=value%s", randomId)
+		http.Get("http://127.0.0.1:36657/broadcast_tx_commit?tx=\"test=value" + randomId + "\"")
+	}
+}
+
 // ----------------------------------------------------------------------------
 
 func useDefaultTestPrivValidator(t testing.TB, n *ScopedNode, config *cfg.Config, userAddress string) {
@@ -460,10 +614,8 @@ func assertStartStopScopedNode(t testing.TB, wg *sync.WaitGroup, n *ScopedNode) 
 	select {
 	case <-blocksSub.Out():
 	case <-blocksSub.Canceled():
-		wg.Done()
 		t.Fatal("blocksSub was canceled")
 	case <-time.After(10 * time.Second):
-		wg.Done()
 		t.Fatal("timed out waiting for the node to produce a block")
 	}
 
@@ -484,7 +636,89 @@ func assertStartStopScopedNode(t testing.TB, wg *sync.WaitGroup, n *ScopedNode) 
 		}
 		err = p.Signal(syscall.SIGABRT)
 		fmt.Println(err)
-		wg.Done()
 		t.Fatal("timed out waiting for shutdown")
 	}
+}
+
+// When using this function, do not forget to call Stop()
+// for every node that is started and created in the NodeRegistry
+func assertStartMultiplexNodeRegistry(
+	t testing.TB,
+	testName string,
+	userScopes map[string][]string,
+) (*cfg.Config, *NodeRegistry, *ScopeRegistry) {
+	t.Helper()
+
+	// Reset the node configuration  files
+	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(testName, "", userScopes)
+
+	// Uses a singleton scope registry to create SHA256 once per iteration
+	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
+	require.NoError(t, err)
+
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
+
+	// Create node registry
+	r, err := DefaultMultiplexNode(config, log.TestingLogger())
+	require.NoError(t, err)
+	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
+	require.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+	// Reset wait group for every iteration
+	wg := sync.WaitGroup{}
+	wg.Add(len(r.Nodes))
+
+	for _, n := range r.Nodes {
+		userAddress, err := scopeRegistry.GetAddress(n.ScopeHash)
+		require.NoError(t, err)
+
+		// Overwrite wal file on a per-node basis
+		walFolder := n.ScopeHash[:16] // uses hex
+		walFile := filepath.Join(baseDataDir, "cs.wal", walFolder, "wal")
+
+		// We overwrite the wal file to allow parallel I/O for multiple nodes
+		n.Config().Consensus.SetWalFile(walFile)
+
+		// We reset the PrivValidator for every node and consensus reactors
+		useDefaultTestPrivValidator(t, n, config, userAddress)
+
+		go func(sn *ScopedNode) {
+			defer wg.Done()
+			t.Logf("Starting new node: %s - %s", sn.ScopeHash, sn.GenesisDoc().ChainID)
+			t.Logf("Using listen addr: p2p:%s - rpc:%s", sn.Config().P2P.ListenAddress, sn.Config().RPC.ListenAddress)
+			err := sn.Start()
+			require.NoError(t, err)
+		}(n)
+	}
+
+	// Wait for both nodes to have produced a block
+	t.Logf("Waiting for %d nodes to be up and running.", len(r.Nodes))
+	wg.Wait()
+
+	return config, r, &scopeRegistry
+}
+
+func assertStartLegacyNode(t testing.TB, testName string) (*cfg.Config, *cmtnode.Node) {
+	config := cmttest.ResetTestRoot(testName)
+
+	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
+	require.NoError(t, err)
+
+	n, err := cmtnode.NewNode(
+		context.Background(),
+		config,
+		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
+		nodeKey,
+		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
+		cmtnode.DefaultGenesisDocProviderFunc(config),
+		cfg.DefaultDBProvider,
+		cmtnode.DefaultMetricsProvider(config.Instrumentation),
+		log.TestingLogger(),
+	)
+	require.NoError(t, err)
+
+	// Start and stop to close the db for later reading
+	err = n.Start()
+	require.NoError(t, err)
+	return config, n
 }
