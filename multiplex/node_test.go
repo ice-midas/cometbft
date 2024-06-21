@@ -390,6 +390,135 @@ func TestMultiplexNodeComplexConfigStartStopSequential(t *testing.T) {
 	wg.Wait()
 }
 
+func TestMultiplexNodeTwoChainsBothProduceBlocks(t *testing.T) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(r.Nodes))
+
+	expectedBlocks := 10
+	actualNumBlocks := make(map[string]int, len(r.Nodes))
+
+	for _, n := range r.Nodes {
+		go func(sn *ScopedNode, maxBlocks int) {
+			// wait for the node to produce blocks
+			blocksSub, err := sn.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
+			assert.NoError(t, err)
+
+			numBlocks := 0
+
+		NODE_BLOCKS_LOOP:
+			for {
+				select {
+				case <-blocksSub.Out():
+					numBlocks++
+					if numBlocks == maxBlocks {
+						actualNumBlocks[sn.ScopeHash] = numBlocks
+						wg.Done()
+						break NODE_BLOCKS_LOOP
+					}
+				case <-blocksSub.Canceled():
+					wg.Done()
+					break NODE_BLOCKS_LOOP
+				case <-time.After(15 * time.Second):
+					wg.Done()
+					break NODE_BLOCKS_LOOP
+				}
+			}
+		}(n, expectedBlocks)
+	}
+
+	// Wait for both nodes to produce 10 blocks in parallel
+	wg.Wait()
+
+	// We assert that both networks produced 10 blocks, if an error
+	// occurred on one of the networks, the map entry won't exist.
+	for _, scopeHash := range r.Scopes {
+		assert.Contains(t, actualNumBlocks, scopeHash)
+		assert.Equal(t, actualNumBlocks[scopeHash], expectedBlocks)
+	}
+}
+
+func TestMultiplexNodeTwoChainsBothProduceLongChain(t *testing.T) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(r.Nodes))
+
+	expectedBlocks := 100
+	actualNumBlocks := make(map[string]int, len(r.Nodes))
+
+	for _, n := range r.Nodes {
+		go func(sn *ScopedNode, maxBlocks int) {
+			// wait for the node to produce blocks
+			blocksSub, err := sn.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
+			assert.NoError(t, err)
+
+			numBlocks := 0
+
+		NODE_BLOCKS_LOOP:
+			for {
+				select {
+				case <-blocksSub.Out():
+					numBlocks++
+					if numBlocks == maxBlocks {
+						actualNumBlocks[sn.ScopeHash] = numBlocks
+						wg.Done()
+						break NODE_BLOCKS_LOOP
+					}
+				case <-blocksSub.Canceled():
+					wg.Done()
+					break NODE_BLOCKS_LOOP
+				case <-time.After(15 * time.Second):
+					wg.Done()
+					break NODE_BLOCKS_LOOP
+				}
+			}
+		}(n, expectedBlocks)
+	}
+
+	// Wait for both nodes to produce 100 blocks in parallel
+	// Note: sometimes one of the networks may progress faster and reach 120 blocks.
+	wg.Wait()
+
+	// We assert that both networks produced 100 blocks, if an error
+	// occurred on one of the networks, the map entry won't exist.
+	for _, scopeHash := range r.Scopes {
+		assert.Contains(t, actualNumBlocks, scopeHash)
+		assert.Equal(t, actualNumBlocks[scopeHash], expectedBlocks)
+	}
+}
+
 // ----------------------------------------------------------------------------
 // Benchmarks
 
