@@ -393,6 +393,35 @@ func TestMultiplexNodeComplexConfigStartStopSequential(t *testing.T) {
 // ----------------------------------------------------------------------------
 // Benchmarks
 
+func BenchmarkMultiplexLegacyNodeConsensus(t *testing.B) {
+
+	config, n := assertStartLegacyNode(t, "mx_bench_node_legacy_node_consensus")
+
+	// Shutdown routine
+	defer func(cn *cmtnode.Node) {
+		defer os.RemoveAll(config.RootDir)
+		_ = cn.Stop()
+	}(n)
+
+	// We shall create random ids to push many txes
+	src := rand.NewSource(time.Now().Unix())
+	randomizer := rand.New(src)
+	mtx := sync.Mutex{}
+
+	// Every iteration should create a transaction with a random value
+	t.ResetTimer()
+	for i := 0; i < t.N; i++ {
+		mtx.Lock()
+		randomizeData := randomizer.Intn(999999)
+		mtx.Unlock()
+
+		randomId := strconv.Itoa(randomizeData)
+
+		t.Logf("Now broadcasting transaction: test=value%s", randomId)
+		http.Get("http://127.0.0.1:36657/broadcast_tx_commit?tx=\"test=value" + randomId + "\"")
+	}
+}
+
 func BenchmarkMultiplexNodeSequentialStartStopTwoChains(t *testing.B) {
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
@@ -546,33 +575,196 @@ func BenchmarkMultiplexNodeTriggerConsensusTwoChains(t *testing.B) {
 	})
 }
 
-func BenchmarkMultiplexLegacyNodeConsensus(t *testing.B) {
+func BenchmarkMultiplexNodeTriggerConsensusTwoUserChains(t *testing.B) {
 
-	config, n := assertStartLegacyNode(t, "mx_bench_node_legacy_node_consensus")
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
+		},
+	)
 
 	// Shutdown routine
-	defer func(cn *cmtnode.Node) {
+	defer func(reg *NodeRegistry) {
 		defer os.RemoveAll(config.RootDir)
-		_ = cn.Stop()
-	}(n)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
 
-	// We shall create random ids to push many txes
-	src := rand.NewSource(time.Now().Unix())
-	randomizer := rand.New(src)
+	// We shall randomly pick a node index
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
 	mtx := sync.Mutex{}
 
-	// Every iteration should create a transaction with a random value
+	t.SetParallelism(1000)
 	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
-		mtx.Lock()
-		randomizeData := randomizer.Intn(999999)
-		mtx.Unlock()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		// and broadcast it using a random node index from the list of nodes
+		for pb.Next() {
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999999)
+			mtx.Unlock()
 
-		randomId := strconv.Itoa(randomizeData)
+			randomVal := strconv.Itoa(randomizeData)
+			txData := "test=value" + randomVal
 
-		t.Logf("Now broadcasting transaction: test=value%s", randomId)
-		http.Get("http://127.0.0.1:36657/broadcast_tx_commit?tx=\"test=value" + randomId + "\"")
-	}
+			mtx.Lock()
+			rpcPort := randomizer.Intn(len(r.Nodes)) + 40001
+			mtx.Unlock()
+
+			nodeRPC := "http://127.0.0.1:" + strconv.Itoa(rpcPort)
+
+			t.Logf("Now broadcasting transaction: %s to %s", txData, nodeRPC)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
+}
+
+func BenchmarkMultiplexNodeTriggerConsensusFourChains(t *testing.B) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "C0mpl3X Sc0p3#!"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Posts", "Transactions"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	// We shall randomly pick a node index
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
+	mtx := sync.Mutex{}
+
+	t.SetParallelism(1000)
+	t.ResetTimer()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		// and broadcast it using a random node index from the list of nodes
+		for pb.Next() {
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999999)
+			mtx.Unlock()
+
+			randomVal := strconv.Itoa(randomizeData)
+			txData := "test=value" + randomVal
+
+			mtx.Lock()
+			rpcPort := randomizer.Intn(len(r.Nodes)) + 40001
+			mtx.Unlock()
+
+			nodeRPC := "http://127.0.0.1:" + strconv.Itoa(rpcPort)
+
+			t.Logf("Now broadcasting transaction: %s to %s", txData, nodeRPC)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
+}
+
+func BenchmarkMultiplexNodeTriggerConsensusEightChains(t *testing.B) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "C0mpl3X Sc0p3#!"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Posts", "Likes"},
+			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ICE"},
+			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"1", "2"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	// We shall randomly pick a node index
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
+	mtx := sync.Mutex{}
+
+	t.SetParallelism(1000)
+	t.ResetTimer()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		// and broadcast it using a random node index from the list of nodes
+		for pb.Next() {
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999999)
+			mtx.Unlock()
+
+			randomVal := strconv.Itoa(randomizeData)
+			txData := "test=value" + randomVal
+
+			mtx.Lock()
+			rpcPort := randomizer.Intn(len(r.Nodes)) + 40001
+			mtx.Unlock()
+
+			nodeRPC := "http://127.0.0.1:" + strconv.Itoa(rpcPort)
+
+			t.Logf("Now broadcasting transaction: %s to %s", txData, nodeRPC)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
+}
+
+func BenchmarkMultiplexNodeTriggerConsensusTwelveChains(t *testing.B) {
+
+	config, r, _ := assertStartMultiplexNodeRegistry(t,
+		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
+		map[string][]string{
+			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "C0mpl3X Sc0p3#!"},
+			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Posts", "Likes", "Media", "Events", "Assets"},
+			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ICE", "Osmosis"},
+			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"1", "2"},
+		},
+	)
+
+	// Shutdown routine
+	defer func(reg *NodeRegistry) {
+		defer os.RemoveAll(config.RootDir)
+		for _, n := range reg.Nodes {
+			_ = n.Stop()
+		}
+	}(r)
+
+	// We shall randomly pick a node index
+	randomizer := rand.New(rand.NewSource(time.Now().Unix()))
+	mtx := sync.Mutex{}
+
+	t.SetParallelism(1000)
+	t.ResetTimer()
+	t.RunParallel(func(pb *testing.PB) {
+		// Every iteration should create a transaction with a random value
+		// and broadcast it using a random node index from the list of nodes
+		for pb.Next() {
+			mtx.Lock()
+			randomizeData := randomizer.Intn(999999999)
+			mtx.Unlock()
+
+			randomVal := strconv.Itoa(randomizeData)
+			txData := "test=value" + randomVal
+
+			mtx.Lock()
+			rpcPort := randomizer.Intn(len(r.Nodes)) + 40001
+			mtx.Unlock()
+
+			nodeRPC := "http://127.0.0.1:" + strconv.Itoa(rpcPort)
+
+			t.Logf("Now broadcasting transaction: %s to %s", txData, nodeRPC)
+			http.Get(nodeRPC + "/broadcast_tx_commit?tx=\"" + txData + "\"")
+		}
+	})
 }
 
 // ----------------------------------------------------------------------------
