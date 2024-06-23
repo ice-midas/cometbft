@@ -398,6 +398,7 @@ func TestMultiplexNodeTwoChainsBothProduceBlocks(t *testing.T) {
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
 			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -454,7 +455,7 @@ func TestMultiplexNodeTwoChainsBothProduceBlocks(t *testing.T) {
 	}
 }
 
-func TestMultiplexNodeTwoChainsBothProduceLongChain(t *testing.T) {
+func TestBigMultiplexNodeTwoChainsBothProduceLongChain(t *testing.T) {
 
 	config, r, _ := assertStartMultiplexNodeRegistry(t,
 		"mx_bench_node_multiplex_node_trigger_consensus_two_users",
@@ -462,6 +463,7 @@ func TestMultiplexNodeTwoChainsBothProduceLongChain(t *testing.T) {
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
 			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -623,6 +625,7 @@ func BenchmarkMultiplexNodeTriggerConsensusSingleChain(t *testing.B) {
 		map[string][]string{
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -665,6 +668,7 @@ func BenchmarkMultiplexNodeTriggerConsensusTwoChains(t *testing.B) {
 		map[string][]string{
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "Other"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -712,6 +716,7 @@ func BenchmarkMultiplexNodeTriggerConsensusTwoUserChains(t *testing.B) {
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default"},
 			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Default"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -759,6 +764,7 @@ func BenchmarkMultiplexNodeTriggerConsensusFourChains(t *testing.B) {
 			"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "C0mpl3X Sc0p3#!"},
 			"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Posts", "Transactions"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -808,6 +814,7 @@ func BenchmarkMultiplexNodeTriggerConsensusEightChains(t *testing.B) {
 			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ICE"},
 			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"1", "2"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -857,6 +864,7 @@ func BenchmarkMultiplexNodeTriggerConsensusTwelveChains(t *testing.B) {
 			"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ICE", "Osmosis"},
 			"5168FD905426DE2E0DB9990B35075EEC3B184977": {"1", "2"},
 		},
+		map[string][]string{}, // empty validator set = default priv validator
 	)
 
 	// Shutdown routine
@@ -961,29 +969,51 @@ func assertStartStopScopedNode(t testing.TB, wg *sync.WaitGroup, n *ScopedNode) 
 	}
 }
 
-// When using this function, do not forget to call Stop()
-// for every node that is started and created in the NodeRegistry
-func assertStartMultiplexNodeRegistry(
+func assertConfigureMultiplexNodeRegistry(
 	t testing.TB,
 	testName string,
-	userScopes map[string][]string,
+	userScopes map[string][]string, // user_address:[scope1,scope2]
+	validators map[string][]string, // scope_hash:[validator1,validator2]
 ) (*cfg.Config, *NodeRegistry, *ScopeRegistry) {
 	t.Helper()
 
-	// Reset the node configuration  files
-	config := mxtest.ResetTestRootMultiplexWithChainIDAndScopes(testName, "", userScopes)
+	// Reset the node configuration files
+	config := &cfg.Config{}
+	if len(validators) == 0 {
+		// Uses DEFAULT priv validator key
+		config = mxtest.ResetTestRootMultiplexWithChainIDAndScopes(testName, "", userScopes)
+	} else {
+		// Uses CUSTOM priv validator key
+		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators)
+	}
 
 	// Uses a singleton scope registry to create SHA256 once per iteration
 	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
 	require.NoError(t, err)
-
-	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 
 	// Create node registry
 	r, err := DefaultMultiplexNode(config, log.TestingLogger())
 	require.NoError(t, err)
 	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
 	require.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
+
+	return config, r, &scopeRegistry
+}
+
+// When using this function, do not forget to call Stop()
+// for every node that is started and created in the NodeRegistry
+func assertStartMultiplexNodeRegistry(
+	t testing.TB,
+	testName string,
+	userScopes map[string][]string, // user_address:[scope1,scope2]
+	validators map[string][]string, // scope_hash:[validator1,validator2]
+) (*cfg.Config, *NodeRegistry, *ScopeRegistry) {
+	t.Helper()
+
+	// Uses ResetTestRootMultiplex* and DefaultMultiplexNode
+	// The node registry and scope registry are fully setup.
+	config, r, scopeRegistry := assertConfigureMultiplexNodeRegistry(t, testName, userScopes, validators)
+	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 
 	// Reset wait group for every iteration
 	wg := sync.WaitGroup{}
@@ -1016,7 +1046,7 @@ func assertStartMultiplexNodeRegistry(
 	t.Logf("Waiting for %d nodes to be up and running.", len(r.Nodes))
 	wg.Wait()
 
-	return config, r, &scopeRegistry
+	return config, r, scopeRegistry
 }
 
 func assertStartLegacyNode(t testing.TB, testName string) (*cfg.Config, *cmtnode.Node) {
