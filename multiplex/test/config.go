@@ -73,9 +73,7 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 
 	// IMPORTANT:
 	// If there is a genesis file at the configured path, read it and expect it
-	// to contain a genesis doc set ; otherwise create it with testUserGenesisFmt.
-	// TODO: Right now, the chainID is forcefully overwritten using a loop ; it is
-	// the network owner's responsibility to provide separate chainIDs.
+	// to contain a genesis doc set ; otherwise create it with testOneScopedGenesisFmt.
 
 	genesisFilePath := filepath.Join(rootDir, baseConfig.Genesis)
 	if !cmtos.FileExists(genesisFilePath) {
@@ -93,6 +91,9 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 			for i, scopeDesc := range baseConfig.GetScopes() {
 				parts := strings.Split(scopeDesc, ":")
 				userAddress, scope := parts[0], parts[1]
+
+				// TODO: Right now, the chainID is forcefully overwritten in loop ; it is
+				// the network owner's responsibility to provide separate chainIDs.
 
 				// Creates one genesis doc per pair of user address and scope
 				perUserChainID := chainID + "-" + strconv.Itoa(i)
@@ -130,8 +131,8 @@ func ResetTestRootMultiplexWithValidators(
 	rootDir := baseConfig.RootDir
 
 	// IMPORTANT:
-	// If there is a genesis file at the configured path, expect it to contain
-	// a genesis doc set ; otherwise create it one with testUserGenesisFmt.
+	// If there is a genesis file at the configured path, read it and expect it
+	// to contain a genesis doc set ; otherwise create it with testOneScopedGenesisFmt.
 
 	genesisFilePath := filepath.Join(rootDir, baseConfig.Genesis)
 
@@ -164,7 +165,7 @@ func ResetTestRootMultiplexWithValidators(
 				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, false) // generate=false
 			} else {
 				// Resets priv validator to newly generated random key
-				privVal := ResetMultiplexPrivValidator(baseConfig, userAddress, scope, true)
+				privVal := ResetMultiplexPrivValidator(baseConfig, userAddress, scope, true) // generate=true
 				pvPubKey := base64.StdEncoding.EncodeToString(privVal.Key.PubKey.Bytes())
 				validatorSet = append(validatorSet, pvPubKey)
 			}
@@ -221,6 +222,7 @@ func GeneratePrivValidators(testName string, numValidators int) []*privval.FileP
 		privVals[i] = filePV
 	}
 
+	os.RemoveAll(tempDir)
 	return privVals
 }
 
