@@ -136,6 +136,7 @@ func ResetTestRootMultiplexWithValidators(
 	userScopes map[string][]string, // user_address:[scope1,scope2]
 	validators map[string][]string, // scope_hash:[validator1,validator2]
 	privValidator *privval.FilePV, // use nil to use default or generate
+	persistentPeers string, // a comma-separated list of peers to keep connection
 ) *config.Config {
 
 	// Calls EnsureRoot() and EnsureRootMultiplex() to reset filesystem
@@ -181,7 +182,7 @@ func ResetTestRootMultiplexWithValidators(
 				validatorSet = append(validatorSet, pvPubKey)
 			} else /* privValidator != nil */ {
 				// Resets priv validator to specific key
-				// IMPORTANT: we won't add it the the validator set as it should be already present
+				// IMPORTANT: we won't add it to the validator set as it should be already present
 				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, privValidator, false) // useDefaultPrivValidator=false
 			}
 
@@ -205,6 +206,11 @@ func ResetTestRootMultiplexWithValidators(
 	// XXX TBI: put singular genesis docs inside scoped subfolders?
 
 	conf := config.MultiplexTestConfig(baseConfig.Replication, userScopes).SetRoot(rootDir)
+
+	if len(persistentPeers) > 0 {
+		conf.P2P.PersistentPeers = persistentPeers
+	}
+
 	return conf
 }
 

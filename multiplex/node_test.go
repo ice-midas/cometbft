@@ -984,6 +984,7 @@ func assertConfigureMultiplexNodeRegistry(
 	validators map[string][]string, // scope_hash:[validator1,validator2]
 	privValidator *privval.FilePV,
 	startPortOverwrite int,
+	persistentPeers string,
 ) (*cfg.Config, *NodeRegistry, *ScopeRegistry) {
 	t.Helper()
 
@@ -994,10 +995,10 @@ func assertConfigureMultiplexNodeRegistry(
 		config = mxtest.ResetTestRootMultiplexWithChainIDAndScopes(testName, "", userScopes)
 	} else if privValidator == nil {
 		// Uses RANDOM priv validator key
-		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, nil)
+		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, nil, persistentPeers)
 	} else /* privValidator != nil */ {
 		// Uses SPECIFIC priv validator key
-		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, privValidator)
+		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, privValidator, persistentPeers)
 	}
 
 	if startPortOverwrite > 0 {
@@ -1030,7 +1031,7 @@ func assertStartMultiplexNodeRegistry(
 
 	// Uses ResetTestRootMultiplex* and DefaultMultiplexNode
 	// The node registry and scope registry are fully setup.
-	config, r, scopeRegistry := assertConfigureMultiplexNodeRegistry(t, testName, userScopes, validators, nil, 0) // nil default priv validator
+	config, r, scopeRegistry := assertConfigureMultiplexNodeRegistry(t, testName, userScopes, validators, nil, 0, "") // nil default priv validator
 	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 
 	// Reset wait group for every iteration

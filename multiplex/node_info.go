@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"slices"
 
-	cmtmx "github.com/cometbft/cometbft/api/cometbft/multiplex/v1"
+	mxp2p "github.com/cometbft/cometbft/api/cometbft/multiplex/v1"
 	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
 	cmtstrings "github.com/cometbft/cometbft/internal/strings"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
@@ -33,6 +33,9 @@ type ScopedListenAddr struct {
 	ScopeHash  string `json:"scope_hash"`
 	ListenAddr string `json:"listen_addr"`
 }
+
+// Assert MultiNetworkNodeInfo satisfies NodeInfo.
+var _ p2p.NodeInfo = MultiNetworkNodeInfo{}
 
 // MultiNetworkNodeInfo is a multiplex node information exchanged
 // between two peers during the CometBFT P2P handshake.
@@ -64,8 +67,10 @@ func (info MultiNetworkNodeInfo) ID() p2p.ID {
 	return info.DefaultNodeID
 }
 
-// Assert MultiNetworkNodeInfo satisfies NodeInfo.
-var _ p2p.NodeInfo = MultiNetworkNodeInfo{}
+// GetChannels returns the node's channels.
+func (info MultiNetworkNodeInfo) GetChannels() cmtbytes.HexBytes {
+	return info.Channels
+}
 
 // Validate checks the self-reported MultiNetworkNodeInfo is safe.
 // It returns an error if there are too many Channels, if there are
@@ -211,7 +216,7 @@ func (info MultiNetworkNodeInfo) HasChannel(chID byte) bool {
 	return bytes.Contains(info.Channels, []byte{chID})
 }
 
-func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
+func (info MultiNetworkNodeInfo) ToProto() *mxp2p.MultiNetworkNodeInfo {
 
 	numReplicatedChains := len(info.Scopes)
 	numVersions := len(info.ProtocolVersions)
@@ -222,12 +227,12 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 		panic(fmt.Sprintf("number of replicated chains inconsistent with protocol versions and networks, Got %d versions, %d networks and %d scopes", numVersions, numNetworks, numReplicatedChains))
 	}
 
-	dni := new(cmtmx.MultiNetworkNodeInfo)
+	dni := new(mxp2p.MultiNetworkNodeInfo)
 	dni.Scopes = make([]string, numReplicatedChains)
-	dni.ProtocolVersions = make([]*cmtmx.ScopedProtocolVersion, numReplicatedChains)
-	dni.Networks = make([]*cmtmx.ScopedChainInfo, numReplicatedChains)
-	dni.ListenAddrs = make([]*cmtmx.ScopedListenAddr, numReplicatedChains)
-	dni.RPCAddresses = make([]*cmtmx.ScopedListenAddr, numReplicatedChains)
+	dni.ProtocolVersions = make([]*mxp2p.ScopedProtocolVersion, numReplicatedChains)
+	dni.Networks = make([]*mxp2p.ScopedChainInfo, numReplicatedChains)
+	dni.ListenAddrs = make([]*mxp2p.ScopedListenAddr, numReplicatedChains)
+	dni.RPCAddresses = make([]*mxp2p.ScopedListenAddr, numReplicatedChains)
 
 	for i, userScopeHash := range info.Scopes {
 
@@ -259,7 +264,7 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 
 		dni.Scopes[i] = userScopeHash
 
-		dni.ProtocolVersions[i] = &cmtmx.ScopedProtocolVersion{
+		dni.ProtocolVersions[i] = &mxp2p.ScopedProtocolVersion{
 			ScopeHash: userScopeHash,
 			ProtocolVersion: &tmp2p.ProtocolVersion{
 				P2P:   protocolVersion.P2P,
@@ -268,17 +273,17 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 			},
 		}
 
-		dni.Networks[i] = &cmtmx.ScopedChainInfo{
+		dni.Networks[i] = &mxp2p.ScopedChainInfo{
 			ScopeHash: userScopeHash,
 			ChainID:   network.ChainID,
 		}
 
-		dni.ListenAddrs[i] = &cmtmx.ScopedListenAddr{
+		dni.ListenAddrs[i] = &mxp2p.ScopedListenAddr{
 			ScopeHash:  userScopeHash,
 			ListenAddr: laddr.ListenAddr,
 		}
 
-		dni.RPCAddresses[i] = &cmtmx.ScopedListenAddr{
+		dni.RPCAddresses[i] = &mxp2p.ScopedListenAddr{
 			ScopeHash:  userScopeHash,
 			ListenAddr: rpcAddr.ListenAddr,
 		}
@@ -295,4 +300,69 @@ func (info MultiNetworkNodeInfo) ToProto() *cmtmx.MultiNetworkNodeInfo {
 	}
 
 	return dni
+}
+
+func MultiNetworkNodeInfoFromToProto(pb *mxp2p.MultiNetworkNodeInfo) (MultiNetworkNodeInfo, error) {
+	if pb == nil {
+		return MultiNetworkNodeInfo{}, errors.New("nil node info")
+	}
+
+	scopes := make([]string, len(pb.Scopes))
+	protocolVersions := make([]ScopedProtocolVersion, len(pb.ProtocolVersions))
+	networks := make([]ScopedChainInfo, len(pb.Networks))
+	listenAddrs := make([]ScopedListenAddr, len(pb.ListenAddrs))
+	rpcAddresses := make([]ScopedListenAddr, len(pb.RPCAddresses))
+
+	for i, scope := range pb.Scopes {
+		scopes[i] = scope
+	}
+
+	for i, pv := range pb.ProtocolVersions {
+		protocolVersions[i] = ScopedProtocolVersion{
+			ScopeHash: pv.ScopeHash,
+			P2P:       pv.ProtocolVersion.P2P,
+			Block:     pv.ProtocolVersion.Block,
+			App:       pv.ProtocolVersion.App,
+		}
+	}
+
+	for i, n := range pb.Networks {
+		networks[i] = ScopedChainInfo{
+			ScopeHash: n.ScopeHash,
+			ChainID:   n.ChainID,
+		}
+	}
+
+	for i, laddr := range pb.ListenAddrs {
+		listenAddrs[i] = ScopedListenAddr{
+			ScopeHash:  laddr.ScopeHash,
+			ListenAddr: laddr.ListenAddr,
+		}
+	}
+
+	for i, raddr := range pb.RPCAddresses {
+		rpcAddresses[i] = ScopedListenAddr{
+			ScopeHash:  raddr.ScopeHash,
+			ListenAddr: raddr.ListenAddr,
+		}
+	}
+
+	dni := MultiNetworkNodeInfo{
+		Scopes:           scopes,
+		ProtocolVersions: protocolVersions,
+		Networks:         networks,
+		ListenAddrs:      listenAddrs,
+		RPCAddresses:     rpcAddresses,
+		DefaultNodeID:    p2p.ID(pb.DefaultNodeID),
+		ListenAddr:       pb.ListenAddr,
+		Version:          pb.Version,
+		Channels:         pb.Channels,
+		Moniker:          pb.Moniker,
+		Other: p2p.DefaultNodeInfoOther{
+			TxIndex:    pb.Other.TxIndex,
+			RPCAddress: pb.Other.RPCAddress,
+		},
+	}
+
+	return dni, nil
 }
