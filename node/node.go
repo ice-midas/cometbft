@@ -1041,6 +1041,11 @@ func (n *Node) SetPrivValidator(pv types.PrivValidator) {
 	n.privValidator = pv
 }
 
+// NodeKey returns the node's p2p key
+func (n *Node) NodeKey() *p2p.NodeKey {
+	return n.nodeKey
+}
+
 // GenesisDoc returns the Node's GenesisDoc.
 func (n *Node) GenesisDoc() *types.GenesisDoc {
 	return n.genesisDoc
