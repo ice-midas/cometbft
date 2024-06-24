@@ -62,11 +62,13 @@ func (c *ScopedUserConfig) GetScopeHashes() []string {
 func NewUserConfig(
 	repl cfg.DataReplicationConfig,
 	userScopes map[string][]string,
+	startListenPort int,
 ) *ScopedUserConfig {
 	config := &ScopedUserConfig{
 		UserConfig: cfg.UserConfig{
 			Replication: cfg.PluralReplicationMode(),
 			UserScopes:  userScopes,
+			ListenPort:  startListenPort,
 		},
 	}
 
@@ -75,10 +77,11 @@ func NewUserConfig(
 }
 
 // NewScopedUserConfig returns a scoped configuration for UserConfig.
-func NewScopedUserConfig(userScopes map[string][]string) *ScopedUserConfig {
+func NewScopedUserConfig(userScopes map[string][]string, startListenPort int) *ScopedUserConfig {
 	config := NewUserConfig(
 		cfg.PluralReplicationMode(),
 		userScopes,
+		startListenPort,
 	)
 	return config
 }
@@ -136,6 +139,7 @@ func TestScopedUserConfig(userScopes map[string][]string) ScopedUserConfig {
 	cfg := NewUserConfig(
 		cfg.PluralReplicationMode(),
 		configScopes,
+		30001,
 	)
 	return *cfg
 }
