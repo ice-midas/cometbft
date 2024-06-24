@@ -273,7 +273,9 @@ func TestMultiplexNodeSingleChainStartStop(t *testing.T) {
 		n.Config().Consensus.SetWalFile(walFile)
 
 		// We reset the PrivValidator for every node and consensus reactors
-		useDefaultTestPrivValidator(t, n, config, userAddress)
+		usePrivValidatorFromFiles(t, n, config, userAddress)
+
+		// Calls wg.Done() after executing node.Stop()
 		assertStartStopScopedNode(t, &wg, n)
 	}
 
@@ -328,7 +330,9 @@ func TestMultiplexNodeMultipleChainsStartStopSequential(t *testing.T) {
 		n.Config().Consensus.SetWalFile(walFile)
 
 		// We reset the PrivValidator for every node and consensus reactors
-		useDefaultTestPrivValidator(t, n, config, userAddress)
+		usePrivValidatorFromFiles(t, n, config, userAddress)
+
+		// Calls wg.Done() after executing node.Stop()
 		assertStartStopScopedNode(t, &wg, n)
 	}
 
@@ -383,7 +387,9 @@ func TestMultiplexNodeComplexConfigStartStopSequential(t *testing.T) {
 		n.Config().Consensus.SetWalFile(walFile)
 
 		// We reset the PrivValidator for every node and consensus reactors
-		useDefaultTestPrivValidator(t, n, config, userAddress)
+		usePrivValidatorFromFiles(t, n, config, userAddress)
+
+		// Calls wg.Done() after executing node.Stop()
 		assertStartStopScopedNode(t, &wg, n)
 	}
 
@@ -609,7 +615,9 @@ func BenchmarkMultiplexNodeSequentialStartStopTwoChains(t *testing.B) {
 			n.Config().Consensus.SetWalFile(walFile)
 
 			// We reset the PrivValidator for every node and consensus reactors
-			useDefaultTestPrivValidator(t, n, config, userAddress)
+			usePrivValidatorFromFiles(t, n, config, userAddress)
+
+			// Calls wg.Done() after executing node.Stop()
 			assertStartStopScopedNode(t, &wg, n)
 		}
 
@@ -906,7 +914,7 @@ func BenchmarkMultiplexNodeTriggerConsensusTwelveChains(t *testing.B) {
 
 // ----------------------------------------------------------------------------
 
-func useDefaultTestPrivValidator(t testing.TB, n *ScopedNode, config *cfg.Config, userAddress string) {
+func usePrivValidatorFromFiles(t testing.TB, n *ScopedNode, config *cfg.Config, userAddress string) {
 	t.Helper()
 
 	scopeId := NewScopeIDFromHash(n.ScopeHash)
@@ -920,10 +928,10 @@ func useDefaultTestPrivValidator(t testing.TB, n *ScopedNode, config *cfg.Config
 	privValKeyFile := filepath.Join(privValKeyDir, filepath.Base(config.PrivValidatorKeyFile()))
 	privValStateFile := filepath.Join(privValStateDir, filepath.Base(config.PrivValidatorStateFile()))
 
-	// Reload the priv validator from files. This overwrite the PrivValidator
-	// so that it uses the default privval that is also listed in the genesis.
+	// Reload the priv validator from files. This overwrites the PrivValidator
+	// so that it uses the default privval or a generated privval.
 	newPV := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile)
-	//fmt.Printf("Using priv validator from files: %s\n", newPV.GetAddress())
+	t.Logf("Using priv validator from files: %s\n", newPV.GetAddress())
 
 	n.SetPrivValidator(newPV)
 
@@ -974,6 +982,8 @@ func assertConfigureMultiplexNodeRegistry(
 	testName string,
 	userScopes map[string][]string, // user_address:[scope1,scope2]
 	validators map[string][]string, // scope_hash:[validator1,validator2]
+	privValidator *privval.FilePV,
+	startPortOverwrite int,
 ) (*cfg.Config, *NodeRegistry, *ScopeRegistry) {
 	t.Helper()
 
@@ -982,9 +992,17 @@ func assertConfigureMultiplexNodeRegistry(
 	if len(validators) == 0 {
 		// Uses DEFAULT priv validator key
 		config = mxtest.ResetTestRootMultiplexWithChainIDAndScopes(testName, "", userScopes)
-	} else {
-		// Uses CUSTOM priv validator key
-		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators)
+	} else if privValidator == nil {
+		// Uses RANDOM priv validator key
+		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, nil)
+	} else /* privValidator != nil */ {
+		// Uses SPECIFIC priv validator key
+		config = mxtest.ResetTestRootMultiplexWithValidators(testName, "", userScopes, validators, privValidator)
+	}
+
+	if startPortOverwrite > 0 {
+		t.Logf("Using start port overwrite: %d", startPortOverwrite)
+		config.UserConfig.ListenPort = startPortOverwrite
 	}
 
 	// Uses a singleton scope registry to create SHA256 once per iteration
@@ -1012,7 +1030,7 @@ func assertStartMultiplexNodeRegistry(
 
 	// Uses ResetTestRootMultiplex* and DefaultMultiplexNode
 	// The node registry and scope registry are fully setup.
-	config, r, scopeRegistry := assertConfigureMultiplexNodeRegistry(t, testName, userScopes, validators)
+	config, r, scopeRegistry := assertConfigureMultiplexNodeRegistry(t, testName, userScopes, validators, nil, 0) // nil default priv validator
 	baseDataDir := filepath.Join(config.RootDir, cfg.DefaultDataDir)
 
 	// Reset wait group for every iteration
@@ -1031,7 +1049,7 @@ func assertStartMultiplexNodeRegistry(
 		n.Config().Consensus.SetWalFile(walFile)
 
 		// We reset the PrivValidator for every node and consensus reactors
-		useDefaultTestPrivValidator(t, n, config, userAddress)
+		usePrivValidatorFromFiles(t, n, config, userAddress)
 
 		go func(sn *ScopedNode) {
 			defer wg.Done()

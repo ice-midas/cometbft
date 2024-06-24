@@ -1743,6 +1743,11 @@ type UserConfig struct {
 	// user addresses such that state is replicated amongst multiple scopes, and one
 	// user may or may not populate databases (tables) for each of these scopes.
 	UserScopes map[string][]string `mapstructure:"scopes"`
+
+	// ListenPort contains a network port number which defaults to 30001
+	// and which is used as the first node's listen address port in the multiplex.
+	// Other nodes in the multiplex increment this value by their respective index.
+	ListenPort int `mapstructure:"start_listen_port"`
 }
 
 // GetAddresses() returns a list of user address from the UserScopes in config.
@@ -1765,4 +1770,15 @@ func (c *UserConfig) GetScopes() []string {
 		}
 	}
 	return r
+}
+
+// GetListenPort() returns the port number used as the first node's
+// P2P listen address port overwrite. This port number will be incremented
+// by one for every other node in the multiplex.
+func (c *UserConfig) GetListenPort() int {
+	if c.ListenPort <= 0 || c.ListenPort > 65535 {
+		return 30001
+	}
+
+	return c.ListenPort
 }

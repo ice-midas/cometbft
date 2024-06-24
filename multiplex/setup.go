@@ -852,7 +852,7 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 		return MultiplexState{}, nil, err
 	}
 
-	mxConfig := NewUserConfig(config.Replication, config.UserScopes)
+	mxConfig := NewUserConfig(config.Replication, config.UserScopes, config.ListenPort)
 	replicatedChains := mxConfig.GetScopeHashes()
 	numReplicatedChains := len(replicatedChains)
 	multiplexState = make(MultiplexState, numReplicatedChains)

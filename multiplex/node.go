@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
-	"strings"
 
 	cfg "github.com/cometbft/cometbft/config"
 	bc "github.com/cometbft/cometbft/internal/blocksync"
@@ -169,7 +169,7 @@ func NewMultiplexNode(ctx context.Context,
 	// GLOBAL BOOTSTRAP
 
 	// Augment user configuration to multiplex capacity
-	mxUserConfig := NewUserConfig(config.Replication, config.UserScopes)
+	mxUserConfig := NewUserConfig(config.Replication, config.UserScopes, config.ListenPort)
 
 	// Initialize filesystem directory structure
 	if err = initDataDir(config); err != nil {
@@ -224,6 +224,7 @@ func NewMultiplexNode(ctx context.Context,
 	// For each of the replicated chains, we store pointers to services during the
 	// lifetime of this function to be able to re-use objects while bootstrapping.
 
+	p2pStartPort := mxUserConfig.GetListenPort()
 	replicatedChainsScopeHashes := mxUserConfig.GetScopeHashes()
 	numReplicatedChains := len(replicatedChainsScopeHashes)
 	stateSyncEnabledByScope := make(MultiplexFlag, numReplicatedChains)
@@ -261,26 +262,36 @@ func NewMultiplexNode(ctx context.Context,
 		// ------------------------------------------------------------------------
 		// CONFIGURATION
 		//
-		// TODO:
-		// Right now we use static port mapping `36656` but this won't work in a
-		// production environment since the port used are then `2xxxx`. This way
-		// shall serve only for testing purposes and should not be used in prod.
+		// IMPORTANT:
+		// A first solution to running many nodes on the same machine requires to
+		// overwrite the port mappings for replicated services. The ports that are
+		// mapped to services are:
+		//
+		// - P2P: legacy `26656`, multiplex `30001`...`3000x` with x the index of nodes
+		// - RPC: legacy `26657`, multiplex `40001`...`4000x`
+		// - gRPC: legacy `26670`, multiplex `50001`...`5000x`
+		// - Privileged gRPC: legacy `26671`, multiplex `60001`...`6000x`
+		//
+		// Note:
+		// The prometheus server and pprof server port mappings are currently not
+		// changed from the legacy implementation. This is because these servers
+		// are used for *profiling* and *metrics*, and profiling generally applies
+		// to the global software scope rather than to individual replicated chains.
 
-		newP2PPort := ":" + strconv.Itoa(30001+i)
-		newRPCPort := ":" + strconv.Itoa(40001+i)
-		newGRPCPort := ":" + strconv.Itoa(50001+i)
-		newGRPCPrivPort := ":" + strconv.Itoa(60001+i)
-		//XXX prometheus
+		re := regexp.MustCompile(`(.*)(\:\d+)(.*)`)
+		newP2PPort := ":" + strconv.Itoa(p2pStartPort+i)           // defaults to 30001
+		newRPCPort := ":" + strconv.Itoa(p2pStartPort+1000+i)      // defaults to 31001
+		newGRPCPort := ":" + strconv.Itoa(p2pStartPort+2000+i)     // defaults to 32001
+		newGRPCPrivPort := ":" + strconv.Itoa(p2pStartPort+3000+i) // defaults to 33001
 
 		multiplexListenAddresses[userScopeHash] = map[string]string{
-			"P2P":      strings.Replace(config.P2P.ListenAddress, ":36656", newP2PPort, 1),
-			"RPC":      strings.Replace(config.RPC.ListenAddress, ":36657", newRPCPort, 1),
-			"GRPC":     strings.Replace(config.GRPC.ListenAddress, ":36670", newGRPCPort, 1),
-			"GRPCPriv": strings.Replace(config.GRPC.Privileged.ListenAddress, ":36671", newGRPCPrivPort, 1),
+			"P2P":      re.ReplaceAllString(config.P2P.ListenAddress, `$1`+newP2PPort+`$3`),
+			"RPC":      re.ReplaceAllString(config.RPC.ListenAddress, `$1`+newRPCPort+`$3`),
+			"GRPC":     re.ReplaceAllString(config.GRPC.ListenAddress, `$1`+newGRPCPort+`$3`),
+			"GRPCPriv": re.ReplaceAllString(config.GRPC.Privileged.ListenAddress, `$1`+newGRPCPrivPort+`$3`),
 		}
 
-		// IMPORTANT:
-		//
+		// Note:
 		// When multiplex (plural replication mode) is enabled, we currently overwrite
 		// the port mappings to use: p2p:30001..3000x, rpc:40001..4000x, etc.
 		// This is to prevent colliding network addresses when running multiple nodes
