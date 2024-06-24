@@ -495,7 +495,7 @@ func createTransports(
 	for _, userScopeHash := range userScopeHashes {
 		var (
 			mConnConfig = p2p.MConnConfig(config.P2P)
-			transport   = p2p.NewMultiplexTransport(nodeInfo, *nodeKey, mConnConfig)
+			transport   = p2p.NewMultiplexTransportWithCustomHandshake(nodeInfo, *nodeKey, mConnConfig, MultiplexTransportHandshake)
 			connFilters = []p2p.ConnFilterFunc{}
 			peerFilters = []p2p.PeerFilterFunc{}
 		)
