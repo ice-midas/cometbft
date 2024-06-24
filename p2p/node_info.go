@@ -33,6 +33,7 @@ func MaxNumChannels() int {
 // and determines if we're compatible.
 type NodeInfo interface {
 	ID() ID
+	GetChannels() cmtbytes.HexBytes
 	nodeInfoAddress
 	nodeInfoTransport
 }
@@ -109,6 +110,11 @@ type DefaultNodeInfoOther struct {
 // ID returns the node's peer ID.
 func (info DefaultNodeInfo) ID() ID {
 	return info.DefaultNodeID
+}
+
+// GetChannels returns the node's channels.
+func (info DefaultNodeInfo) GetChannels() cmtbytes.HexBytes {
+	return info.Channels
 }
 
 // Validate checks the self-reported DefaultNodeInfo is safe.
