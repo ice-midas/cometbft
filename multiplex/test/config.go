@@ -21,7 +21,8 @@ func ResetMultiplexPrivValidator(
 	cfg config.BaseConfig,
 	userAddress string,
 	scope string,
-	generate bool,
+	privValidator *privval.FilePV,
+	useDefaultPrivValidator bool,
 ) *privval.FilePV {
 
 	scopeHash := CreateScopeHash(fmt.Sprintf("%s:%s", userAddress, scope))
@@ -40,18 +41,28 @@ func ResetMultiplexPrivValidator(
 	// fmt.Printf("Resetting priv validator key file: %s\n", privValKeyFile)
 	// fmt.Printf("Resetting priv validator state file: %s\n", privValStateFile)
 
-	if !generate {
+	if useDefaultPrivValidator {
 		// XXX careful this uses always the same priv validator, if a change is made to
 		//     it, please also update the genesis.validators option.
 		cmttest.ResetTestPrivValidatorFiles(privValKeyFile, privValStateFile)
 		return privval.LoadFilePV(privValKeyFile, privValStateFile)
 	}
 
-	// IMPORTANT:
-	// This generates a random privValidator private key
-	filePV := privval.GenFilePV(privValKeyFile, privValStateFile)
+	// Not using default priv validator, we will either generate a random
+	// new priv validator key, or use the one provided with privValidator
+	filePV := &privval.FilePV{}
+
+	if privValidator == nil {
+		// IMPORTANT: This generates a random privValidator private key
+		filePV = privval.GenFilePV(privValKeyFile, privValStateFile)
+	} else {
+		filePV = privValidator
+	}
+
 	testPrivValidatorKey, _ := cmtjson.MarshalIndent(filePV.Key, "", "  ")
 	cmtos.MustWriteFile(privValKeyFile, []byte(testPrivValidatorKey), 0o644)
+
+	// We always reset priv validator state to 0-height
 	cmtos.MustWriteFile(privValStateFile, []byte(testPrivValidatorState), 0o644)
 
 	return filePV
@@ -101,7 +112,7 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 				testGenesis += scopedTestGenesis + ","
 
 				// resets priv validators to default state/key (as present in genesis)
-				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, false) // generate=false
+				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, nil, true) // useDefaultPrivValidator=true
 			}
 
 			// Removes last comma and closes json array
@@ -124,6 +135,7 @@ func ResetTestRootMultiplexWithValidators(
 	chainID string,
 	userScopes map[string][]string, // user_address:[scope1,scope2]
 	validators map[string][]string, // scope_hash:[validator1,validator2]
+	privValidator *privval.FilePV, // use nil to use default or generate
 ) *config.Config {
 
 	// Calls EnsureRoot() and EnsureRootMultiplex() to reset filesystem
@@ -156,18 +168,21 @@ func ResetTestRootMultiplexWithValidators(
 			perUserChainID := chainID + "-" + strconv.Itoa(i)
 
 			// Resets priv validator to default state (as present in genesis)
-			// generate=true means a NEW random priv validator is generated
 			validatorSet, ok := validators[scopeHash]
 			if !ok {
-				// Resets priv validator to default KEY as well
+				// Resets priv validator to default key
 				fmt.Printf("WARNING: no validators found, fallback to default validator set (%s)\n", scopeHash)
 				validatorSet = []string{testGenesisValidatorPubKey}
-				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, false) // generate=false
-			} else {
+				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, nil, true) // useDefaultPrivValidator=true
+			} else if privValidator == nil {
 				// Resets priv validator to newly generated random key
-				privVal := ResetMultiplexPrivValidator(baseConfig, userAddress, scope, true) // generate=true
+				privVal := ResetMultiplexPrivValidator(baseConfig, userAddress, scope, nil, false) // useDefaultPrivValidator=false
 				pvPubKey := base64.StdEncoding.EncodeToString(privVal.Key.PubKey.Bytes())
 				validatorSet = append(validatorSet, pvPubKey)
+			} else /* privValidator != nil */ {
+				// Resets priv validator to specific key
+				// IMPORTANT: we won't add it the the validator set as it should be already present
+				ResetMultiplexPrivValidator(baseConfig, userAddress, scope, privValidator, false) // useDefaultPrivValidator=false
 			}
 
 			validatorsJSON := ""
