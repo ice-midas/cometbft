@@ -38,7 +38,7 @@ func (c *ScopedUserConfig) computeUserScopeHashes() error {
 	}
 
 	c.userAddresses = make([]string, len(c.UserScopes))
-	for userAddress, _ := range c.UserScopes {
+	for userAddress := range c.UserScopes {
 		c.userAddresses = append(c.userAddresses, userAddress)
 	}
 

@@ -53,6 +53,7 @@ func EnsureRoot(rootDir string) {
 
 // EnsureRootMultiplex creates the scoped data directories if they don't exist,
 // and panics if it fails.
+// FIXME: should use ScopeRegistry implementation and moved to multiplex/
 func EnsureRootMultiplex(rootDir string, config *BaseConfig) {
 	// Storage is located in scopes subfolders per each user
 	// Uses one subfolder by user and one subfolder by scope

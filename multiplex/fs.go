@@ -15,6 +15,7 @@ import (
 
 // MultiplexFSProvider returns multiple data filesystem paths using DefaultDataDir
 // specified in the Config and uses two levels of subfolders for user and scope.
+// The scope-level subfolders are named after the first 8-bytes of the scope hash.
 func MultiplexFSProvider(config *cfg.Config) (multiplex MultiplexFS, err error) {
 
 	// When replication is in singular mode, we will create only one data dir
@@ -25,10 +26,7 @@ func MultiplexFSProvider(config *cfg.Config) (multiplex MultiplexFS, err error) 
 		return multiplex, nil
 	}
 
-	// XXX:
-	// It may make more sense to use the scope fingerprint as a subfolder
-	// for the database, including maybe a fingerprint of the user address.
-	// The current two-level fs is easiest for testing and investigations.
+	// This multiplex maps scope hashes to scoped data folders
 	multiplex = map[string]string{}
 
 	// Uses a singleton scope registry to create SHA256 once
