@@ -30,10 +30,7 @@ type ScopedDB struct {
 func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 
-	// XXX:
-	// It may make more sense to use the scope fingerprint as a subfolder
-	// for the database, including maybe a fingerprint of the user address.
-	// The current two-level fs is easiest for testing and investigations.
+	// This multiplex maps scope hashes to scoped database folders
 	multiplex = MultiplexDB{}
 
 	scopeRegistry, err := DefaultScopeHashProvider(&ctx.Config.UserConfig)
@@ -46,16 +43,21 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 		// Uses one subfolder by user
 		dbStorage := filepath.Join(ctx.Config.DBDir(), userAddress)
 
+		// FIXME: must use scope fingerprints to avoid storage issues
 		for _, scope := range ctx.Config.UserScopes[userAddress] {
-			// .. and one subfolder by scope
-			dbStorage = filepath.Join(dbStorage, scope)
-
-			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
+			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
 			if err != nil {
 				return nil, err
 			}
 
-			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
+			// The folder name is the hex representation of the fingerprint
+			scopeId := NewScopeIDFromHash(scopeHash)
+			folderName := scopeId.Fingerprint()
+
+			// .. and one subfolder by scope
+			dbStorage = filepath.Join(dbStorage, folderName)
+
+			userDb, err := dbm.NewDB(ctx.ID, dbType, dbStorage)
 			if err != nil {
 				return nil, err
 			}

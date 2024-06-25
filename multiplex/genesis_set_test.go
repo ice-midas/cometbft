@@ -30,14 +30,18 @@ func TestMultiplexGenesisDocSetBad(t *testing.T) {
 		[]byte(`[{"user_address": "A0", "scope": "Default", "genesis": {"chain_id": "abc", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}}]`),                                  // junk user address
 		[]byte(`[{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": null, "genesis": {"chain_id": "abc", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}}]`), // nil scope
 		[]byte(`[
-			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "abc", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}},
-			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "abc", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}}
+			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "abc1", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}},
+			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "abc2", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}}
 		]`), // scope hash not unique
 		[]byte(`[
 			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default" "genesis": {"chain_id": "abc1", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}},
 			{"user_address": "FF080888BE0F48DE88927C3F49215B96548273AB", "scope": "Other", "genesis": {"chain_id": "abc2", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Charlie"}}},
 			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "abc3", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Dave"}}}
 		]`), // scope hash not unique
+		[]byte(`[
+			{"user_address": "FF190888BE0F48DE88927C3F49215B96548273AF", "scope": "Default", "genesis": {"chain_id": "same-chain", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}},
+			{"user_address": "FF080888BE0F48DE88927C3F49215B96548273AB", "scope": "Default", "genesis": {"chain_id": "same-chain", "initial_height": "1", "consensus_params": null, "validators": null,"app_hash":"","app_state":{"account_owner":"Bob"}}}
+		]`), // ChainID not unique
 	}
 
 	for i, testCase := range testCases {
@@ -78,7 +82,7 @@ func TestMultiplexGenesisDocSetGood(t *testing.T) {
 			"scope": "Default",
 			"genesis": {
 				"genesis_time": "0001-01-01T00:00:00Z",
-				"chain_id": "test-chain-QDKdJr",
+				"chain_id": "test-chain-QDKdJr-1",
 				"initial_height": "1000",
 				"consensus_params": null,
 				"validators": [{
@@ -95,7 +99,7 @@ func TestMultiplexGenesisDocSetGood(t *testing.T) {
 			"scope": "Default",
 			"genesis": {
 				"genesis_time": "0001-01-01T00:00:00Z",
-				"chain_id": "test-chain-QDKdJr",
+				"chain_id": "test-chain-QDKdJr-2",
 				"initial_height": "1000",
 				"consensus_params": null,
 				"validators": [{
@@ -118,7 +122,7 @@ func TestMultiplexGenesisDocSetGood(t *testing.T) {
 			"scope": "Default",
 			"genesis": {
 				"genesis_time": "0001-01-01T00:00:00Z",
-				"chain_id": "test-chain-QDKdJr",
+				"chain_id": "test-chain-QDKdJr-1",
 				"initial_height": "1000",
 				"consensus_params": null,
 				"validators": [{
@@ -135,7 +139,7 @@ func TestMultiplexGenesisDocSetGood(t *testing.T) {
 			"scope": "Another",
 			"genesis": {
 				"genesis_time": "0001-01-01T00:00:00Z",
-				"chain_id": "test-chain-QDKdJr",
+				"chain_id": "test-chain-QDKdJr-2",
 				"initial_height": "1000",
 				"consensus_params": null,
 				"validators": [{
@@ -310,7 +314,7 @@ func randomGenesisDocSet(opt ...int) *GenesisDocSet {
 			ScopeHash:   scopeId.Hash(),
 			GenesisDoc: types.GenesisDoc{
 				GenesisTime:   cmttime.Now(),
-				ChainID:       "abc" + strconv.Itoa(i),
+				ChainID:       "test-chain-" + strconv.Itoa(i),
 				InitialHeight: 1000,
 				Validators: []types.GenesisValidator{{
 					Address: valPubKey.Address(),
