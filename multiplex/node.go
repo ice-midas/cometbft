@@ -86,7 +86,6 @@ func (r *NodeRegistry) GetListenAddresses() MultiplexServiceAddress {
 			"RPC":      node.Config().RPC.ListenAddress,
 			"GRPC":     node.Config().GRPC.ListenAddress,
 			"GRPCPriv": node.Config().GRPC.Privileged.ListenAddress,
-			//XXX prometheus
 		}
 	}
 
@@ -268,9 +267,9 @@ func NewMultiplexNode(ctx context.Context,
 		// mapped to services are:
 		//
 		// - P2P: legacy `26656`, multiplex `30001`...`3000x` with x the index of nodes
-		// - RPC: legacy `26657`, multiplex `40001`...`4000x`
-		// - gRPC: legacy `26670`, multiplex `50001`...`5000x`
-		// - Privileged gRPC: legacy `26671`, multiplex `60001`...`6000x`
+		// - RPC: legacy `26657`, multiplex `31001`...`3100x`
+		// - gRPC: legacy `26670`, multiplex `32001`...`3200x`
+		// - Privileged gRPC: legacy `26671`, multiplex `33001`...`3300x`
 		//
 		// Note:
 		// The prometheus server and pprof server port mappings are currently not
@@ -385,9 +384,6 @@ func NewMultiplexNode(ctx context.Context,
 			folderName := scopeId.Fingerprint()
 			privValKeyDir := filepath.Join(userConfDir, folderName)
 			privValStateDir := filepath.Join(userDataDir, folderName)
-
-			// fmt.Printf("using privValKeyFile: %s\n", filepath.Join(privValKeyDir, filepath.Base(nodeConfig.PrivValidatorKeyFile())))
-			// fmt.Printf("using privValStateFile: %s\n", filepath.Join(privValStateDir, filepath.Base(nodeConfig.PrivValidatorStateFile())))
 
 			privValidator = privval.LoadOrGenFilePV(
 				filepath.Join(privValKeyDir, filepath.Base(nodeConfig.PrivValidatorKeyFile())),
@@ -649,8 +645,6 @@ func NewMultiplexNode(ctx context.Context,
 		nodeInfo: nodeInfo,
 		nodeKey:  nodeKey,
 
-		// TODO: every Node instance stores their own resources in memory
-		// such that the multiplex storage in this struct is heavily redundant.
 		Nodes:  make(map[string]*ScopedNode, len(replicatedChainsScopeHashes)),
 		Scopes: replicatedChainsScopeHashes,
 	}

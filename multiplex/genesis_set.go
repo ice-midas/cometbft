@@ -106,7 +106,10 @@ func (genDocSet *GenesisDocSet) ValidateAndComplete() error {
 	}
 
 	users := map[string]bool{}
+	chains := map[string]bool{}
 	for i, userGenDoc := range genDocSet.GenesisDocs {
+		userChainID := userGenDoc.GenesisDoc.ChainID
+
 		// Validate the address
 		address := userGenDoc.UserAddress
 		if len(address) != tmhash.TruncatedSize {
@@ -126,6 +129,10 @@ func (genDocSet *GenesisDocSet) ValidateAndComplete() error {
 			return fmt.Errorf("duplicate scope hash in the genesis file for pair of user %v and scope %s", address, userGenDoc.Scope)
 		}
 
+		if _, ok := chains[userChainID]; ok {
+			return fmt.Errorf("ChainID already exists in the genesis file for pair of user %v and scope %s", address, userGenDoc.Scope)
+		}
+
 		err := userGenDoc.GenesisDoc.ValidateAndComplete()
 
 		if err != nil {
@@ -134,6 +141,7 @@ func (genDocSet *GenesisDocSet) ValidateAndComplete() error {
 
 		// Flag for uniqueness
 		users[userGenDoc.ScopeHash] = true
+		chains[userChainID] = true
 		genDocSet.GenesisDocs[i] = userGenDoc
 	}
 

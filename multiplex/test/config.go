@@ -82,15 +82,17 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 	baseConfig := resetRootDirWithChainIDAndScopes(testName, chainID, userScopes)
 	rootDir := baseConfig.RootDir
 
+	if chainID == "" {
+		chainID = cmttest.DefaultTestChainID
+	}
+
 	// IMPORTANT:
 	// If there is a genesis file at the configured path, read it and expect it
 	// to contain a genesis doc set ; otherwise create it with testOneScopedGenesisFmt.
 
 	genesisFilePath := filepath.Join(rootDir, baseConfig.Genesis)
 	if !cmtos.FileExists(genesisFilePath) {
-		if chainID == "" {
-			chainID = cmttest.DefaultTestChainID
-		}
+
 		var testGenesis string
 		if len(userScopes) == 0 {
 			testGenesis = fmt.Sprintf(testUserGenesisFmt, TestUserAddress, TestScope, chainID, testDefaultGenesisValidator)
@@ -207,6 +209,7 @@ func ResetTestRootMultiplexWithValidators(
 
 	conf := config.MultiplexTestConfig(baseConfig.Replication, userScopes).SetRoot(rootDir)
 
+	// XXX this should be scoped
 	if len(persistentPeers) > 0 {
 		conf.P2P.PersistentPeers = persistentPeers
 	}
