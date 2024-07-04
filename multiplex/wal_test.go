@@ -1,14 +1,13 @@
 package multiplex
 
 import (
-	"encoding/hex"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/crypto/merkle"
 	"github.com/cometbft/cometbft/internal/autofile"
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	cmtrand "github.com/cometbft/cometbft/internal/rand"
@@ -18,7 +17,7 @@ import (
 // ----------------------------------------------------------------------------
 // Benchmarks
 
-func benchmarkWalWrite(b *testing.B, wals []*cs.BaseWAL, data cs.WALMessage, numWalFiles int) {
+func benchmarkWALWrite(b *testing.B, wals []*cs.BaseWAL, data cs.WALMessage, numWalFiles int) {
 	b.Helper()
 
 	// Creates a thread-safe rand instance
@@ -36,6 +35,36 @@ func benchmarkWalWrite(b *testing.B, wals []*cs.BaseWAL, data cs.WALMessage, num
 	})
 }
 
+func benchmarkMultiplexWALWrite(b *testing.B, wals MultiplexWAL, data cs.WALMessage, numWalFiles int) {
+	b.Helper()
+
+	// Creates a thread-safe rand instance
+	randomizer := cmtrand.NewRand()
+	scopeHashes := make([]string, len(wals))
+
+	// slice of map keys
+	i := 0
+	for k := range wals {
+		scopeHashes[i] = k
+		i++
+	}
+
+	b.SetParallelism(numWalFiles) // 1 proc per WAL file
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		// Every iteration should perform a write in WAL
+		for pb.Next() {
+			// cmtrand is thread-safe
+			walIdx := randomizer.Intn(numWalFiles)
+
+			wals[scopeHashes[walIdx]].Write(data)
+		}
+	})
+}
+
+// ----------------------------------------------------------------------------
+// BaseWAL implementation benchmarks
+
 func BenchmarkMultiwalFilesWriteRaw1K(b *testing.B) {
 	numWalFiles := 1000
 
@@ -44,10 +73,10 @@ func BenchmarkMultiwalFilesWriteRaw1K(b *testing.B) {
 	defer os.RemoveAll(rootDir)
 
 	// Mocks an 8-byte WAL raw message
-	data, _ := hex.DecodeString("0102030405060708")
+	data := getWALMessage(b)
 
 	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
-	benchmarkWalWrite(b, walPtrs, cs.WALMessage(data), numWalFiles)
+	benchmarkWALWrite(b, walPtrs, data, numWalFiles)
 }
 
 func BenchmarkMultiwalFilesWriteRaw2K(b *testing.B) {
@@ -58,13 +87,13 @@ func BenchmarkMultiwalFilesWriteRaw2K(b *testing.B) {
 	defer os.RemoveAll(rootDir)
 
 	// Mocks an 8-byte WAL raw message
-	data, _ := hex.DecodeString("0102030405060708")
+	data := getWALMessage(b)
 
 	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
-	benchmarkWalWrite(b, walPtrs, cs.WALMessage(data), numWalFiles)
+	benchmarkWALWrite(b, walPtrs, data, numWalFiles)
 }
 
-// CAUTION: This benchmark currently breaks due to a too high amount of WAL files
+// CAUTION: This benchmark currently breaks due to a bottleneck in autofile
 func BenchmarkMultiwalFilesWriteRaw10K(b *testing.B) {
 	numWalFiles := 10000
 
@@ -73,36 +102,70 @@ func BenchmarkMultiwalFilesWriteRaw10K(b *testing.B) {
 	defer os.RemoveAll(rootDir)
 
 	// Mocks an 8-byte WAL raw message
-	data, _ := hex.DecodeString("0102030405060708")
+	data := getWALMessage(b)
 
 	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
-	benchmarkWalWrite(b, walPtrs, cs.WALMessage(data), numWalFiles)
+	benchmarkWALWrite(b, walPtrs, data, numWalFiles)
 }
 
-func BenchmarkMultiwalFilesWriteBlock1K(b *testing.B) {
+// ----------------------------------------------------------------------------
+// MultiplexWAL implementation benchmarks
+
+func BenchmarkMultiplexWALFilesWriteRaw1K(b *testing.B) {
 	numWalFiles := 1000
 
 	// Reset benchmark fs
-	rootDir, _, walPtrs := ResetMultiwalTestRoot(b, "test-multi-wal-files-write-2k", numWalFiles)
+	rootDir, multiplexWAL := ResetMultiplexWALTestRoot(b, "test-multiplex-wal-files-write-1k", numWalFiles)
 	defer os.RemoveAll(rootDir)
 
-	// Mocks a block part message with 8 bytes 0-message
-	data := &cs.BlockPartMessage{
-		Height: 1,
-		Round:  1,
-		Part: &cmttypes.Part{
-			Index: 1,
-			Bytes: make([]byte, 1),
-			Proof: merkle.Proof{
-				Total:    1,
-				Index:    1,
-				LeafHash: make([]byte, 8), // 8-bytes 0 message
-			},
-		},
-	}
+	// Mocks an 8-byte WAL raw message
+	data := getWALMessage(b)
 
 	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
-	benchmarkWalWrite(b, walPtrs, data, numWalFiles)
+	benchmarkMultiplexWALWrite(b, *multiplexWAL, data, numWalFiles)
+}
+
+func BenchmarkMultiplexWALFilesWriteRaw2K(b *testing.B) {
+	numWalFiles := 2000
+
+	// Reset benchmark fs
+	rootDir, multiplexWAL := ResetMultiplexWALTestRoot(b, "test-multiplex-wal-files-write-2k", numWalFiles)
+	defer os.RemoveAll(rootDir)
+
+	// Mocks an 8-byte WAL raw message
+	data := getWALMessage(b)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
+	benchmarkMultiplexWALWrite(b, *multiplexWAL, data, numWalFiles)
+}
+
+func BenchmarkMultiplexWALFilesWriteRaw10K(b *testing.B) {
+	numWalFiles := 10000
+
+	// Reset benchmark fs
+	rootDir, multiplexWAL := ResetMultiplexWALTestRoot(b, "test-multiplex-wal-files-write-10k", numWalFiles)
+	defer os.RemoveAll(rootDir)
+
+	// Mocks an 8-byte WAL raw message
+	data := getWALMessage(b)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
+	benchmarkMultiplexWALWrite(b, *multiplexWAL, data, numWalFiles)
+}
+
+// CAUTION: This benchmark currently breaks due to a system limit "too many open files"
+func BenchmarkMultiplexWALFilesWriteRaw100K(b *testing.B) {
+	numWalFiles := 100000
+
+	// Reset benchmark fs
+	rootDir, multiplexWAL := ResetMultiplexWALTestRoot(b, "test-multiplex-wal-files-write-100k", numWalFiles)
+	defer os.RemoveAll(rootDir)
+
+	// Mocks an 8-byte WAL raw message
+	data := getWALMessage(b)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numWalFiles
+	benchmarkMultiplexWALWrite(b, *multiplexWAL, data, numWalFiles)
 }
 
 // ----------------------------------------------------------------------------
@@ -126,6 +189,24 @@ func ResetMultiwalTestRoot(
 	return rootDir, walFiles, walPtrs
 }
 
+func ResetMultiplexWALTestRoot(
+	t testing.TB,
+	testName string,
+	numWalFiles int,
+) (string, *MultiplexWAL) {
+	// create a unique, concurrency-safe test directory under os.TempDir()
+	rootDir, err := os.MkdirTemp("", testName)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create numWalFiles .wal files in temp and create cs.WAL instances
+	wals, err := createTempWalMultiplex(t, rootDir, numWalFiles)
+	require.NoError(t, err, "should create wal files in temp directory")
+
+	return rootDir, wals
+}
+
 // ----------------------------------------------------------------------------
 
 // Note: This helper does not start the WAL service
@@ -145,8 +226,8 @@ func createTempWalFiles(
 		}
 
 		wal, err := cs.NewWAL(walFile.Name(),
-			autofile.GroupCheckDuration(60*time.Second),
-			autofile.GroupHeadSizeLimit(100*1024*1024), // 100M
+			autofile.GroupCheckDuration(60*time.Second), // XXX too long
+			autofile.GroupHeadSizeLimit(100*1024*1024),  // 100M
 		)
 		require.NoError(t, err, "should create new WAL instance")
 
@@ -154,4 +235,54 @@ func createTempWalFiles(
 	}
 
 	return walFiles, walPtrs, nil
+}
+
+// createTempWalMultiplex attempts to create a WAL multiplex.
+func createTempWalMultiplex(
+	t testing.TB,
+	rootDir string,
+	numScopeHashes int,
+) (*MultiplexWAL, error) {
+	t.Helper()
+
+	// Creates a thread-safe rand instance
+	randomizer := cmtrand.NewRand()
+
+	walFiles := make(map[string]string, numScopeHashes)
+	for i := 0; i < numScopeHashes; i++ {
+		scopeHash := randomizer.Str(32) // random 32 bytes user scope hash
+
+		// create a unique, concurrency-safe wal directory under rootDir
+		walDir := filepath.Join(rootDir, scopeHash[:16])
+		err := os.MkdirAll(walDir, os.ModePerm)
+		if err != nil {
+			panic(err)
+		}
+
+		walFile, err := os.CreateTemp(walDir, "*.wal")
+		if err != nil {
+			return nil, err
+		}
+
+		walFiles[scopeHash] = walFile.Name()
+		walFile.Close() // no need to keep open
+	}
+
+	multiplexWAL, err := NewScopedWAL(walFiles,
+		autofile.GroupCheckDuration(60*time.Second), // XXX too long
+		autofile.GroupHeadSizeLimit(100*1024*1024),  // 100M
+	)
+	require.NoError(t, err, "should create new WAL multiplex")
+
+	return multiplexWAL, nil
+}
+
+func getWALMessage(t testing.TB) cs.WALMessage {
+	t.Helper()
+
+	return cmttypes.EventDataRoundState{
+		Height: 1,
+		Round:  1,
+		Step:   "1",
+	}
 }
