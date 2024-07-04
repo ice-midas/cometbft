@@ -35,7 +35,7 @@ func GetScopedGroup(
 	return nil, fmt.Errorf("could not find autofile group in multiplex using scope hash %s", scopeHash)
 }
 
-// OpenGroup creates a new scoped Group with head at headPath. It returns an error if
+// OpenScopedGroup creates a new scoped Group with head at headPath. It returns an error if
 // it fails to open head file.
 func OpenScopedGroup(
 	scopeHash string,
