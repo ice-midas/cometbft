@@ -232,6 +232,7 @@ func createTempWalFiles(
 		require.NoError(t, err, "should create new WAL instance")
 
 		walPtrs[i] = wal
+		walFile.Close() // no need to keep open
 	}
 
 	return walFiles, walPtrs, nil
