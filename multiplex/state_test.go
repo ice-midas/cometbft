@@ -55,6 +55,40 @@ func BenchmarkStateMakeBlock1K(b *testing.B) {
 	benchmarkMakeBlock(b, dbPtrs, statePtrs, numDatabases)
 }
 
+func BenchmarkStateMakeBlock2K(b *testing.B) {
+	numDatabases := 2000
+
+	// Reset benchmark fs
+	rootDir, dbPtrs, statePtrs := ResetStateTestRoot(b, "test-state-make-block-2k", numDatabases)
+	defer os.RemoveAll(rootDir)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numDatabases
+	benchmarkMakeBlock(b, dbPtrs, statePtrs, numDatabases)
+}
+
+func BenchmarkStateMakeBlock10K(b *testing.B) {
+	numDatabases := 10000
+
+	// Reset benchmark fs
+	rootDir, dbPtrs, statePtrs := ResetStateTestRoot(b, "test-state-make-block-10k", numDatabases)
+	defer os.RemoveAll(rootDir)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numDatabases
+	benchmarkMakeBlock(b, dbPtrs, statePtrs, numDatabases)
+}
+
+// CAUTION: This benchmark currently breaks due to a time limitation (for benchtime=30s).
+func BenchmarkStateMakeBlock100K(b *testing.B) {
+	numDatabases := 100000
+
+	// Reset benchmark fs
+	rootDir, dbPtrs, statePtrs := ResetStateTestRoot(b, "test-state-make-block-100k", numDatabases)
+	defer os.RemoveAll(rootDir)
+
+	// Runs b.RunParallel() with GOMAXPROCS=numDatabases
+	benchmarkMakeBlock(b, dbPtrs, statePtrs, numDatabases)
+}
+
 // ----------------------------------------------------------------------------
 // Exported helpers
 
