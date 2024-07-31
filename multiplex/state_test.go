@@ -42,7 +42,7 @@ func benchmarkMakeBlock(b *testing.B, dbs []dbm.DB, states []sm.State, numDataba
 }
 
 // ----------------------------------------------------------------------------
-// cometbft-db PrefixDB implementation benchmarks
+// cometbft State implementation benchmarks
 
 func BenchmarkStateMakeBlock1K(b *testing.B) {
 	numDatabases := 1000
