@@ -75,11 +75,6 @@ type CliParams struct {
 	GenesisHash []byte
 }
 
-// GenesisDocProvider returns a GenesisDoc together with its SHA256 checksum.
-// It allows the GenesisDoc to be pulled from sources other than the
-// filesystem, for instance from a distributed key-value store cluster.
-type GenesisDocProvider func() (ChecksummedGenesisDoc, error)
-
 // DefaultGenesisDoc() implements IChecksummedGenesisDoc
 func (c *ChecksummedGenesisDoc) DefaultGenesisDoc() (*types.GenesisDoc, error) {
 	return c.GenesisDoc, nil
@@ -656,13 +651,10 @@ func LoadStateFromDBOrGenesisDocProviderWithConfig(
 		return sm.State{}, nil, err
 	}
 
+	// Validate and complete genesis doc
 	csGenDoc, err := icsGenDoc.DefaultGenesisDoc()
 	if err != nil {
 		return sm.State{}, nil, err
-	}
-
-	// Validate and complete genesis doc
-		return sm.State{}, nil, fmt.Errorf("error in genesis doc: %w", err)
 	}
 
 	// Validate that existing or recently saved genesis file hash matches optional --genesis_hash passed by operator

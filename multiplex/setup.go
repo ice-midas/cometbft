@@ -426,13 +426,14 @@ func createBlocksyncReactor(config *cfg.Config,
 	blockExec *sm.BlockExecutor,
 	blockStore *ScopedBlockStore,
 	blockSync bool,
+	localAddr crypto.Address,
 	logger log.Logger,
 	metrics *blocksync.Metrics,
 	offlineStateSyncHeight int64,
 ) (bcReactor p2p.Reactor, err error) {
 	switch config.BlockSync.Version {
 	case "v0":
-		bcReactor = blocksync.NewReactor(state.GetState(), blockExec, blockStore.BlockStore, blockSync, metrics, offlineStateSyncHeight)
+		bcReactor = blocksync.NewReactor(state.GetState(), blockExec, blockStore.BlockStore, blockSync, localAddr, metrics, offlineStateSyncHeight)
 	case "v1", "v2":
 		return nil, fmt.Errorf("block sync version %s has been deprecated. Please use v0", config.BlockSync.Version)
 	default:
