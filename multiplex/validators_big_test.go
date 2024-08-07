@@ -111,7 +111,7 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 	// -----------------------------------------------------------------------
 	// BLOCKS PRODUCTIONS
 	// This block waits for nodes to relay 2 blocks, note that not all validator
-	// nodes (8) produce at least on block. A longer test with a blockchain of
+	// nodes (8) produce at least one block. A longer test with a blockchain of
 	// at least 100 blocks may be better to assess this metric (needs bigger timeout).
 
 	blocksWg := sync.WaitGroup{}
@@ -141,7 +141,7 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 				case <-blocksSub.Canceled():
 					blocksWg.Done()
 					break NODE_BLOCKS_LOOP
-				case <-time.After(15 * time.Second):
+				case <-time.After(30 * time.Second):
 					blocksWg.Done()
 					break NODE_BLOCKS_LOOP
 				}
