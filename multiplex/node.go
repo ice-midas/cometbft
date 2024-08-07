@@ -189,7 +189,7 @@ func NewMultiplexNode(ctx context.Context,
 	multiplexState, icsGenDoc, err := LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 		stateMultiplexDB,
 		genesisDocProvider,
-		config.Storage.GenesisHash,
+		"",
 		config,
 	)
 	if err != nil {
@@ -404,6 +404,8 @@ func NewMultiplexNode(ctx context.Context,
 			return nil, fmt.Errorf("can't get pubkey: %w", err)
 		}
 
+		localAddr := pubKey.Address()
+
 		// ------------------------------------------------------------------------
 		// CONSENSUS
 
@@ -490,7 +492,7 @@ func NewMultiplexNode(ctx context.Context,
 			}
 		}
 		// Don't start block sync if we're doing a state sync first.
-		bcReactor, err := createBlocksyncReactor(nodeConfig, stateMachine, blockExec, blockStore, blockSync && !stateSync, logger, bsMetrics, offlineStateSyncHeight)
+		bcReactor, err := createBlocksyncReactor(nodeConfig, stateMachine, blockExec, blockStore, blockSync && !stateSync, localAddr, logger, bsMetrics, offlineStateSyncHeight)
 		if err != nil {
 			return nil, fmt.Errorf("could not create blocksync reactor: %w", err)
 		}

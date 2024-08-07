@@ -148,7 +148,6 @@ func newPeer(
 		Data:     cmap.NewCMap(),
 		metrics:  NopMetrics(),
 		pendingMetrics: newPeerPendingMetricsCache(),
-		mlc:      mlc,
 	}
 
 	p.mconn = createMConnection(
