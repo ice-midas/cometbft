@@ -1,14 +1,14 @@
 package multiplex
 
 import (
-	cfg "github.com/cometbft/cometbft/config"
+	cmtcfg "github.com/cometbft/cometbft/config"
 )
 
 // ScopedUserConfig embeds UserConfig and computes SHA256 hashes
 // by pairing user addresses and individual scopes such that every
 // combination of user address and scope can be referred to by hash
 type ScopedUserConfig struct {
-	cfg.UserConfig
+	cmtcfg.UserConfig
 
 	// userAddresses contains addresses (20 bytes hex) by which state is replicated.
 	// This property is populated automatically and should not be modified.
@@ -23,7 +23,7 @@ type ScopedUserConfig struct {
 // computeUserScopeHashes uses DefaultScopeHashProvider to populate the config
 // instance's userScopeHashes and userAddresses fields.
 func (c *ScopedUserConfig) computeUserScopeHashes() error {
-	if c.Replication == cfg.SingularReplicationMode() {
+	if c.Replication == cmtcfg.SingularReplicationMode() {
 		return nil
 	}
 
@@ -57,13 +57,13 @@ func (c *ScopedUserConfig) GetScopeHashes() []string {
 
 // NewUserConfig returns a new pointer to a ScopedUserConfig object.
 func NewUserConfig(
-	repl cfg.DataReplicationConfig,
+	repl cmtcfg.DataReplicationConfig,
 	userScopes map[string][]string,
 	startListenPort int,
 ) *ScopedUserConfig {
 	config := &ScopedUserConfig{
-		UserConfig: cfg.UserConfig{
-			Replication: cfg.PluralReplicationMode(),
+		UserConfig: cmtcfg.UserConfig{
+			Replication: cmtcfg.PluralReplicationMode(),
 			UserScopes:  userScopes,
 			ListenPort:  startListenPort,
 		},
@@ -76,7 +76,7 @@ func NewUserConfig(
 // NewScopedUserConfig returns a scoped configuration for UserConfig.
 func NewScopedUserConfig(userScopes map[string][]string, startListenPort int) *ScopedUserConfig {
 	config := NewUserConfig(
-		cfg.PluralReplicationMode(),
+		cmtcfg.PluralReplicationMode(),
 		userScopes,
 		startListenPort,
 	)
@@ -89,7 +89,7 @@ func NewScopedUserConfig(userScopes map[string][]string, startListenPort int) *S
 // TestUserConfig returns a basic user configuration for testing a CometBFT node.
 func TestUserConfig() ScopedUserConfig {
 	return ScopedUserConfig{
-		UserConfig: cfg.DefaultUserConfig(),
+		UserConfig: cmtcfg.DefaultUserConfig(),
 	}
 }
 
@@ -108,7 +108,7 @@ func TestScopedUserConfig(userScopes map[string][]string) ScopedUserConfig {
 	}
 
 	cfg := NewUserConfig(
-		cfg.PluralReplicationMode(),
+		cmtcfg.PluralReplicationMode(),
 		configScopes,
 		30001,
 	)
