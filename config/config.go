@@ -126,6 +126,27 @@ func TestConfig() *Config {
 	}
 }
 
+// MultiplexTestConfig returns a configuration that can be used for testing
+// the multiplex node implementation (plural replication mode).
+func MultiplexTestConfig(
+	repl DataReplicationConfig,
+	userScopes map[string][]string,
+) *Config {
+	return &Config{
+		BaseConfig:      MultiplexTestBaseConfig(repl, userScopes),
+		RPC:             TestRPCConfig(),
+		GRPC:            TestGRPCConfig(),
+		P2P:             TestP2PConfig(),
+		Mempool:         TestMempoolConfig(),
+		StateSync:       TestStateSyncConfig(),
+		BlockSync:       TestBlockSyncConfig(),
+		Consensus:       TestConsensusConfig(),
+		Storage:         TestStorageConfig(),
+		TxIndex:         TestTxIndexConfig(),
+		Instrumentation: TestInstrumentationConfig(),
+	}
+}
+
 // SetRoot sets the RootDir for all Config structs.
 func (cfg *Config) SetRoot(root string) *Config {
 	cfg.BaseConfig.RootDir = root
@@ -134,6 +155,28 @@ func (cfg *Config) SetRoot(root string) *Config {
 	cfg.Mempool.RootDir = root
 	cfg.Consensus.RootDir = root
 	return cfg
+}
+
+func (cfg *Config) SetListenAddresses(
+	p2pListenAddr string,
+	rpcListenAddr string,
+	grpcListenAddr string,
+	grpcPrivListenAddr string,
+) *Config {
+	cfg.P2P.ListenAddress = p2pListenAddr
+	cfg.RPC.ListenAddress = rpcListenAddr
+	cfg.GRPC.ListenAddress = grpcListenAddr
+	cfg.GRPC.Privileged.ListenAddress = grpcPrivListenAddr
+	return cfg
+}
+
+func (cfg *Config) GetListenAddresses() map[string]string {
+	return map[string]string{
+		"P2P":      cfg.P2P.ListenAddress,
+		"RPC":      cfg.RPC.ListenAddress,
+		"GRPC":     cfg.GRPC.ListenAddress,
+		"GRPCPriv": cfg.GRPC.Privileged.ListenAddress,
+	}
 }
 
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
