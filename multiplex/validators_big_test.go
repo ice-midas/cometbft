@@ -3,6 +3,7 @@ package multiplex
 import (
 	"context"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -88,7 +89,6 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 	}(validatorConfs, validatorNodes)
 
 	// Uses a singleton scope registry to create SHA256 once per iteration
-	// XXX decouple scopeRegistry creation from assertConfigureMultiplexNodeRegistry
 	scopeRegistry, err := DefaultScopeHashProvider(&validatorConfs[0].UserConfig)
 	require.NoError(t, err)
 
@@ -159,5 +159,70 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 	for _, n := range validatorNodes {
 		assert.Contains(t, actualNumBlocks, n.Config().P2P.ListenAddress)
 		assert.Equal(t, actualNumBlocks[n.Config().P2P.ListenAddress], expectedBlocks)
+	}
+}
+
+func TestBigMultiplexValidatorSetStartStopProduceBlocksManyChainsEightValidators(t *testing.T) {
+	testName := "mx_test_validator_set_start_stop_produce_blocks_many_chains_eight_validators"
+	numValidators := 8
+	userScopes := map[string][]string{
+		// mind changing mxtest.TestScopeHash if you make a change here (1st scope).
+		"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {"Default", "C0mpl3x Scope, by Midas!"},
+		"FF1410CEEB411E55487701C4FEE65AACE7115DC0": {"Posts", "Likes", "Media", "Reviews", "Links"},
+		"BB2B85FABDAF8469F5A0F10AB3C060DE77D409BB": {"Cosmos", "ICE", "Osmosis"},
+		"5168FD905426DE2E0DB9990B35075EEC3B184977": {"Posts", "Likes"},
+	}
+
+	// -----------------------------------------------------------------------
+	// NODES CONFIGURATION
+
+	validatorsPubs, privValidators := createTestValidatorSet(t, testName, numValidators, userScopes)
+	require.NotEmpty(t, validatorsPubs, "should create a valid validator set")
+	require.Contains(t, validatorsPubs, mxtest.TestScopeHash)
+	require.Contains(t, privValidators, mxtest.TestScopeHash)
+	require.Equal(t, len(privValidators[mxtest.TestScopeHash]), numValidators)
+
+	var validatorNodes []*ScopedNode
+	var validatorConfs []*cfg.Config
+
+	// ni for "network index"
+	ni := 0
+	for scopeHash := range privValidators {
+		// Configures numValidators validator nodes with same scopeHash
+		var p2pNodeKey1stNode string
+		startListenPort := 30001 + ni
+		for i := 0; i < numValidators; i++ {
+			nodePrivValidator := privValidators[scopeHash][i]
+
+			persistentPeers := ""
+			if i > 0 {
+				persistentPeers = p2pNodeKey1stNode + "@127.0.0.1:" + strconv.Itoa(startListenPort)
+				startListenPort = startListenPort + 4000 // careful if more than 8 validators (port invalid)
+			}
+
+			valNodeConfig, valNodeRegistry, _ := assertConfigureMultiplexNodeRegistry(t,
+				testName+"-"+strconv.Itoa(ni), // ni for "network index"
+				userScopes,
+				validatorsPubs,    // non-empty => ResetTestRootMultiplexWithValidators
+				nodePrivValidator, // sets custom privValidator
+				startListenPort,   // overwrite the listen port for each validator
+				persistentPeers,   // empty persistent peers for first validator
+			)
+
+			if i == 0 {
+				firstNode := valNodeRegistry.Nodes[scopeHash]
+				p2pNodeKey1stNode = string(firstNode.NodeKey().ID())
+			}
+
+			validatorNodes = append(validatorNodes, valNodeRegistry.Nodes[scopeHash])
+			validatorConfs = append(validatorConfs, valNodeConfig)
+		}
+
+		require.NotEmpty(t, p2pNodeKey1stNode)
+		assert.Equal(t, numValidators*(ni+1), len(validatorNodes), "number of nodes should equal number of validators")
+		assert.Equal(t, numValidators*(ni+1), len(validatorConfs), "number of node configs should equal number of validators")
+
+		// Next network init
+		ni++
 	}
 }
