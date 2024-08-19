@@ -226,8 +226,8 @@ func createTempWalFiles(
 		}
 
 		wal, err := cs.NewWAL(walFile.Name(),
-			autofile.GroupCheckDuration(60*time.Second), // XXX too long
-			autofile.GroupHeadSizeLimit(100*1024*1024),  // 100M
+			autofile.GroupCheckDuration(60*time.Second),
+			autofile.GroupHeadSizeLimit(100*1024*1024), // 100M
 		)
 		require.NoError(t, err, "should create new WAL instance")
 
@@ -269,8 +269,8 @@ func createTempWalMultiplex(
 	}
 
 	multiplexWAL, err := NewScopedWAL(walFiles,
-		autofile.GroupCheckDuration(60*time.Second), // XXX too long
-		autofile.GroupHeadSizeLimit(100*1024*1024),  // 100M
+		autofile.GroupCheckDuration(60*time.Second),
+		autofile.GroupHeadSizeLimit(100*1024*1024), // 100M
 	)
 	require.NoError(t, err, "should create new WAL multiplex")
 

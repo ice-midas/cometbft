@@ -39,13 +39,14 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 	var validatorNodes []*ScopedNode
 	var validatorConfs []*cfg.Config
 	startListenPort := 30001
+	fstValListenPort := startListenPort
 	for i := 0; i < numValidators; i++ {
 		nodePrivValidator := privValidators[mxtest.TestScopeHash][i]
 
 		persistentPeers := ""
 		if i > 0 {
-			persistentPeers = p2pNodeKey1stNode + "@127.0.0.1:30001" // XXX ListenPort
-			startListenPort = startListenPort + 4000                 // careful if more than 8 validators (port invalid)
+			persistentPeers = p2pNodeKey1stNode + "@127.0.0.1:" + strconv.Itoa(fstValListenPort)
+			startListenPort = startListenPort + 4000 // careful if more than 8 validators (port invalid)
 		}
 
 		valNodeConfig, valNodeRegistry, _ := assertConfigureMultiplexNodeRegistry(t,

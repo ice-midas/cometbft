@@ -494,6 +494,6 @@ func assertStartValidatorNodeParallel(
 		t.Logf("Starting new node: %s - %s", sn.ScopeHash, sn.GenesisDoc().ChainID)
 		t.Logf("Using listen addr: p2p:%s - rpc:%s", sn.Config().P2P.ListenAddress, sn.Config().RPC.ListenAddress)
 		err := sn.Start()
-		assert.NoError(t, err, "node startup should not produce an error")
+		require.NoError(t, err, "node startup should not produce an error")
 	}(node)
 }
