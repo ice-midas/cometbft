@@ -8,12 +8,23 @@ import (
 	sm "github.com/cometbft/cometbft/state"
 )
 
+// StateServices describes scoped services that are used to
+// manage a replicated state machine and contains instances
+// of [ScopedDB], [ScopedState], [ScopedStateStore], [ScopedBlockStore].
+type StateServices struct {
+	DB           *ScopedDB
+	StateMachine *ScopedState
+	StateStore   *ScopedStateStore
+	BlockStore   *ScopedBlockStore
+}
+
 // ScopedState embeds a state instance and adds a scope hash
 type ScopedState struct {
 	ScopeHash string
 	sm.State
 }
 
+// GetState returns a copy of the state machine
 func (s ScopedState) GetState() sm.State {
 	return s.Copy()
 }

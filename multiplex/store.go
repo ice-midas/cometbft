@@ -31,11 +31,15 @@ type ScopedBlockStore struct {
 	*store.BlockStore
 }
 
-// LoadState loads the State from the database.
+// ----------------------------------------------------------------------------
+// ScopedStateStore
+
+// Load loads the State from the database using the stateKey.
 func (store ScopedStateStore) Load() (sm.State, error) {
 	return store.loadState(stateKey)
 }
 
+// loadState loads the State from the database given a key.
 func (store ScopedStateStore) loadState(key []byte) (state sm.State, err error) {
 	start := time.Now()
 	buf, err := store.GetDatabase().Get(key)
@@ -66,11 +70,11 @@ func (store ScopedStateStore) loadState(key []byte) (state sm.State, err error) 
 }
 
 // ----------------------------------------------------------------------------
-// Multiplex providers
+// Factories
 
-// MultiplexStateStoreProvider creates multiple ScopedStateStore using
+// NewMultiplexStateStore creates multiple ScopedStateStore using
 // the database multiplex dbm.DB instances and the state machine DBStore.
-func MultiplexStateStoreProvider(
+func NewMultiplexStateStore(
 	multiplex MultiplexDB,
 	options sm.StoreOptions,
 ) (mStore MultiplexStateStore) {
@@ -85,11 +89,11 @@ func MultiplexStateStoreProvider(
 	return mStore
 }
 
-// MultiplexBlockStoreProvider creates multiple ScopedBlockStore using
+// NewMultiplexBlockStore creates multiple ScopedBlockStore using
 // the database multiplex dbm.DB instances and the BlockStore struct.
 // Additionally, the block store is initialized to the last height that
 // was committed to the corresponding DB.
-func MultiplexBlockStoreProvider(
+func NewMultiplexBlockStore(
 	multiplex MultiplexDB,
 	options ...store.BlockStoreOption,
 ) (mbStore MultiplexBlockStore) {
@@ -105,9 +109,6 @@ func MultiplexBlockStoreProvider(
 
 	return mbStore
 }
-
-// ----------------------------------------------------------------------------
-// Scoped instance getters
 
 // GetScopedStateStore tries to find a state store in the store multiplex using its scope hash
 func GetScopedStateStore(

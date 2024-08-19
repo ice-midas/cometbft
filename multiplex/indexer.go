@@ -21,7 +21,7 @@ import (
 // GetScopedIndexer tries to find a db instance in the db multiplex using its scope hash
 // and creates instances for the TxIndexer and BlockIndexer.
 //
-// XXX:
+// TODO(midas):
 // The scoped indexer functionality is compatible only with the `kv` indexer for now,
 // postgresql compatibility must be added. Appending the scope hash to the chainID
 // in the NewEventSink() call may be enough to allow multiple indexers instances.

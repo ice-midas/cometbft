@@ -126,7 +126,7 @@ func (info MultiNetworkNodeInfo) Validate() error {
 	for _, scopedRPCAddr := range info.RPCAddresses {
 		rpcAddr := scopedRPCAddr.ListenAddr
 
-		// XXX: Should we be more strict about address formats?
+		// TODO: Should we be more strict about address formats?
 		if len(rpcAddr) > 0 && (!cmtstrings.IsASCIIText(rpcAddr) || cmtstrings.ASCIITrim(rpcAddr) == "") {
 			return fmt.Errorf("info.Other.RPCAddress=%v must be valid ASCII text without tabs", rpcAddr)
 		}

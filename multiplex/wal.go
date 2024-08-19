@@ -33,7 +33,7 @@ func NewScopedWAL(walFiles map[string]string, groupOptions ...func(*auto.Group))
 			return nil, fmt.Errorf("failed to ensure WAL directory is in place: %w", err)
 		}
 
-		// XXX head file is opened, i.e. bottleneck with > 10k files
+		// FIXME(midas): head file is opened, i.e. bottleneck with > 10k files.
 		group, err := OpenScopedGroup(scopeHash, walFile, groupOptions...)
 		if err != nil {
 			return nil, err

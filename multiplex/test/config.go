@@ -42,8 +42,8 @@ func ResetMultiplexPrivValidator(
 	// fmt.Printf("Resetting priv validator state file: %s\n", privValStateFile)
 
 	if useDefaultPrivValidator {
-		// XXX careful this uses always the same priv validator, if a change is made to
-		//     it, please also update the genesis.validators option.
+		// CAUTION: careful this uses always the same priv validator,
+		// if a change is made to it, please also update the genesis.validators.
 		cmttest.ResetTestPrivValidatorFiles(privValKeyFile, privValStateFile)
 		return privval.LoadFilePV(privValKeyFile, privValStateFile)
 	}
@@ -124,7 +124,7 @@ func ResetTestRootMultiplexWithChainIDAndScopes(
 		cmtos.MustWriteFile(genesisFilePath, []byte(testGenesis), 0o644)
 	}
 
-	// XXX TBI: put singular genesis docs inside scoped subfolders?
+	// TODO(midas): TBI: put singular genesis docs inside scoped subfolders?
 
 	conf := config.MultiplexTestConfig(baseConfig.Replication, userScopes).SetRoot(rootDir)
 	return conf
@@ -205,11 +205,11 @@ func ResetTestRootMultiplexWithValidators(
 		cmtos.MustWriteFile(genesisFilePath, []byte(testGenesis), 0o644)
 	}
 
-	// XXX TBI: put singular genesis docs inside scoped subfolders?
+	// TODO(midas): TBI: put singular genesis docs inside scoped subfolders?
 
 	conf := config.MultiplexTestConfig(baseConfig.Replication, userScopes).SetRoot(rootDir)
 
-	// XXX this should be scoped
+	// Force overwrite of persistent peers if any are provided.
 	if len(persistentPeers) > 0 {
 		conf.P2P.PersistentPeers = persistentPeers
 	}
@@ -273,10 +273,9 @@ func resetRootDirWithChainIDAndScopes(
 
 	baseConfig.RootDir = rootDir
 
-	// XXX:
-	// This is not optimal as it is possible that undesired config will
-	// be overwritten ; at best we should replace the EnsureRoot call
-	// completely with this one. This solution is for further compat.
+	// TODO(midas):
+	// This is not optimal, at best we should replace the EnsureRoot call
+	// completely with this one. This solution is for further compatibility.
 	config.EnsureRootMultiplex(rootDir, &baseConfig)
 	return baseConfig
 }

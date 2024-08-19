@@ -56,13 +56,11 @@ func PluralUserGenesisDocProviderFunc(config *cfg.Config) node.GenesisDocProvide
 			return nil, err
 		}
 
+		// TODO(midas): SHA256 of each GenesisDoc, not the GenesisDocSet
 		// doc, ok, err := genDocSet.SearchGenesisDocByUser(config.UserAddress)
 		// if !ok || err != nil {
 		// 	return &ChecksummedUserGenesisDoc{}, err
 		// }
-
-		// XXX
-		// SHA256 of the GenesisDoc, not the GenesisDocSet
 		// genDocJSONBlob, err := cmtjson.Marshal(doc.GenesisDoc)
 		// if err != nil {
 		// 	return ChecksummedUserGenesisDoc{}, err
@@ -127,19 +125,19 @@ func initMultiplexDBs(
 	evidenceMultiplexDB MultiplexDB,
 	err error,
 ) {
-	bsMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
+	bsMultiplexDB, _ = OpenMultiplexDB(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "blockstore", Config: config},
 	})
 
-	stateMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
+	stateMultiplexDB, _ = OpenMultiplexDB(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "state", Config: config},
 	})
 
-	indexerMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
+	indexerMultiplexDB, _ = OpenMultiplexDB(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "tx_index", Config: config},
 	})
 
-	evidenceMultiplexDB, _ = MultiplexDBProvider(&ScopedDBContext{
+	evidenceMultiplexDB, _ = OpenMultiplexDB(&ScopedDBContext{
 		DBContext: cfg.DBContext{ID: "evidence", Config: config},
 	})
 
@@ -158,69 +156,6 @@ func initDataDir(config *cfg.Config) error {
 	}
 
 	return nil
-}
-
-// ----------------------------------------------------------------------------
-// Scoped instance getters
-
-func GetScopedStateServices(
-	stateMultiplexDB *MultiplexDB,
-	multiplexState *MultiplexState,
-	multiplexStateStore *MultiplexStateStore,
-	multiplexBlockStore *MultiplexBlockStore,
-	userScopeHash string,
-) (*ScopedDB, *ScopedState, *ScopedStateStore, *ScopedBlockStore, error) {
-	stateDB, err := GetScopedDB(*stateMultiplexDB, userScopeHash)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	stateMachine, err := GetScopedState(*multiplexState, userScopeHash)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	stateStore, err := GetScopedStateStore(*multiplexStateStore, userScopeHash)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	blockStore, err := GetScopedBlockStore(*multiplexBlockStore, userScopeHash)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	return stateDB, stateMachine, stateStore, blockStore, nil
-}
-
-func GetScopedReactors(
-	multiplexBlockSyncReactor MultiplexBlockSyncReactor,
-	multiplexStateSyncReactor MultiplexStateSyncReactor,
-	multiplexConsensusReactor MultiplexConsensusReactor,
-	multiplexEvidenceReactor MultiplexEvidenceReactor,
-	userScopeHash string,
-) (*p2p.Reactor, *statesync.Reactor, *cs.Reactor, *evidence.Reactor, error) {
-	blockSyncReactor, ok := multiplexBlockSyncReactor[userScopeHash]
-	if !ok {
-		return nil, nil, nil, nil, fmt.Errorf("blocksync reactor for scope hash %s not found", userScopeHash)
-	}
-
-	stateSyncReactor, ok := multiplexStateSyncReactor[userScopeHash]
-	if !ok {
-		return nil, nil, nil, nil, fmt.Errorf("statesync reactor for scope hash %s not found", userScopeHash)
-	}
-
-	consensusReactor, ok := multiplexConsensusReactor[userScopeHash]
-	if !ok {
-		return nil, nil, nil, nil, fmt.Errorf("consensus reactor for scope hash %s not found", userScopeHash)
-	}
-
-	evidenceReactor, ok := multiplexEvidenceReactor[userScopeHash]
-	if !ok {
-		return nil, nil, nil, nil, fmt.Errorf("evidence reactor for scope hash %s not found", userScopeHash)
-	}
-
-	return blockSyncReactor, stateSyncReactor, consensusReactor, evidenceReactor, nil
 }
 
 // ------------------------------------------------------------------------------
@@ -483,17 +418,12 @@ func createTransports(
 	config *cfg.Config,
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
-	userScopeHashes []string,
-	multiplexAppConns map[string]*proxy.AppConns,
-) (
-	MultiplexP2PTransport,
-	MultiplexPeerFilterFunc,
-) {
+	reactor *Reactor,
+) error {
+	// Service provider is used to retrieve proxyApp
+	serviceProvider := reactor.GetServiceProvider()
 
-	transportMultiplex := make(MultiplexP2PTransport, len(userScopeHashes))
-	peerFilterMultiplex := make(MultiplexPeerFilterFunc, len(userScopeHashes))
-
-	for _, userScopeHash := range userScopeHashes {
+	for _, userScopeHash := range reactor.replChains {
 		var (
 			mConnConfig = p2p.MConnConfig(config.P2P)
 			transport   = p2p.NewMultiplexTransportWithCustomHandshake(nodeInfo, *nodeKey, mConnConfig, MultiplexTransportHandshake)
@@ -512,8 +442,8 @@ func createTransports(
 				connFilters,
 				// ABCI query for address filtering.
 				func(_ p2p.ConnSet, c net.Conn, _ []net.IP) error {
-					proxyApp := multiplexAppConns[userScopeHash]
-					res, err := (*proxyApp).Query().Query(context.TODO(), &abci.QueryRequest{
+					proxyApp := serviceProvider(userScopeHash, "proxyApp").(proxy.AppConns)
+					res, err := proxyApp.Query().Query(context.TODO(), &abci.QueryRequest{
 						Path: "/p2p/filter/addr/" + c.RemoteAddr().String(),
 					})
 					if err != nil {
@@ -531,8 +461,8 @@ func createTransports(
 				peerFilters,
 				// ABCI query for ID filtering.
 				func(_ p2p.IPeerSet, p p2p.Peer) error {
-					proxyApp := multiplexAppConns[userScopeHash]
-					res, err := (*proxyApp).Query().Query(context.TODO(), &abci.QueryRequest{
+					proxyApp := serviceProvider(userScopeHash, "proxyApp").(proxy.AppConns)
+					res, err := proxyApp.Query().Query(context.TODO(), &abci.QueryRequest{
 						Path: fmt.Sprintf("/p2p/filter/id/%s", p.ID()),
 					})
 					if err != nil {
@@ -549,78 +479,55 @@ func createTransports(
 
 		p2p.MultiplexTransportConnFilters(connFilters...)(transport)
 
-		// XXX due to multiplex of multiplex, we must probably divide the max peers
-		//     by the number of replicated chains.
-
+		// TODO(midas): due to multiplex of multiplex, we must probably divide the max peers by the number of replicated chains.
 		// Limit the number of incoming connections.
 		max := config.P2P.MaxNumInboundPeers + len(splitAndTrimEmpty(config.P2P.UnconditionalPeerIDs, ",", " "))
 		p2p.MultiplexTransportMaxIncomingConnections(max)(transport)
 
-		transportMultiplex[userScopeHash] = transport
-		peerFilterMultiplex[userScopeHash] = peerFilters
+		reactor.RegisterService(userScopeHash, "transport", transport)
+		reactor.SetPeerFilters(userScopeHash, peerFilters)
 	}
 
-	return transportMultiplex, peerFilterMultiplex
+	return nil
 }
 
 func createSwitches(
 	config *cfg.Config,
-	transportMultiplex MultiplexP2PTransport,
 	p2pMetrics *p2p.Metrics,
-	peerFiltersMultiplex MultiplexPeerFilterFunc,
-	userScopeHashes []string,
-	multiplexMempoolReactor map[string]*mempl.Reactor,
-	multiplexBlockSyncReactor map[string]*p2p.Reactor,
-	multiplexStateSyncReactor map[string]*statesync.Reactor,
-	multiplexConsensusReactor map[string]*cs.Reactor,
-	multiplexEvidenceReactor map[string]*evidence.Reactor,
 	nodeInfo p2p.NodeInfo,
 	nodeKey *p2p.NodeKey,
 	p2pLogger log.Logger,
-) (MultiplexSwitch, error) {
-
-	switchMultiplex := make(MultiplexSwitch, len(userScopeHashes))
+	reactor *Reactor,
+) error {
+	// Service provider is used to retrieve reactors
+	serviceProvider := reactor.GetServiceProvider()
+	userScopeHashes := reactor.GetScopeRegistry().GetScopeHashes()
 
 	for _, userScopeHash := range userScopeHashes {
 
-		transport := transportMultiplex[userScopeHash]
-		peerFilters := peerFiltersMultiplex[userScopeHash]
+		nodeConfig := reactor.GetReplNodeConfig(userScopeHash)
+		transport := serviceProvider(userScopeHash, "transport")
+		peerFilters := reactor.GetReplPeerFilters(userScopeHash)
 
-		blockSyncReactor,
-			stateSyncReactor,
-			consensusReactor,
-			evidenceReactor,
-			err := GetScopedReactors(
-			multiplexBlockSyncReactor,
-			multiplexStateSyncReactor,
-			multiplexConsensusReactor,
-			multiplexEvidenceReactor,
-			userScopeHash,
-		)
-
-		// missing reactors not allowed
-		if err != nil {
-			return nil, err
-		}
+		blockSyncReactor := serviceProvider(userScopeHash, "blockSyncReactor").(*blocksync.Reactor)
+		stateSyncReactor := serviceProvider(userScopeHash, "stateSyncReactor").(*statesync.Reactor)
+		consensusReactor := serviceProvider(userScopeHash, "consensusReactor").(*cs.Reactor)
+		evidenceReactor := serviceProvider(userScopeHash, "evidenceReactor").(*evidence.Reactor)
 
 		sw := NewScopedSwitch(
-			config.P2P,
-			transport,
+			nodeConfig.P2P,
+			transport.(*p2p.MultiplexTransport),
 			userScopeHash,
 			p2p.WithMetrics(p2pMetrics),
 			p2p.SwitchPeerFilters(peerFilters...),
 		)
 
 		sw.SetLogger(p2pLogger)
-		if config.Mempool.Type != cfg.MempoolTypeNop {
-			mempoolReactor, ok := multiplexMempoolReactor[userScopeHash]
-			if !ok {
-				return nil, fmt.Errorf("mempool reactor for scope hash %s not found", userScopeHash)
-			}
-
+		if nodeConfig.Mempool.Type != cfg.MempoolTypeNop {
+			mempoolReactor := serviceProvider(userScopeHash, "mempoolReactor").(*mempl.Reactor)
 			sw.AddReactor("MEMPOOL", mempoolReactor)
 		}
-		sw.AddReactor("BLOCKSYNC", *blockSyncReactor)
+		sw.AddReactor("BLOCKSYNC", blockSyncReactor)
 		sw.AddReactor("CONSENSUS", consensusReactor)
 		sw.AddReactor("EVIDENCE", evidenceReactor)
 		sw.AddReactor("STATESYNC", stateSyncReactor)
@@ -628,41 +535,37 @@ func createSwitches(
 		sw.SetNodeInfo(nodeInfo)
 		sw.SetNodeKey(nodeKey)
 
-		if len(config.P2P.PersistentPeers) > 0 {
-			err = sw.AddPersistentPeers(splitAndTrimEmpty(config.P2P.PersistentPeers, ",", " "))
+		if len(nodeConfig.P2P.PersistentPeers) > 0 {
+			err := sw.AddPersistentPeers(splitAndTrimEmpty(nodeConfig.P2P.PersistentPeers, ",", " "))
 			if err != nil {
-				return nil, fmt.Errorf("could not add peers from persistent_peers field: %w", err)
+				return fmt.Errorf("could not add peers from persistent_peers field: %w", err)
 			}
 		}
 
-		if len(config.P2P.UnconditionalPeerIDs) > 0 {
-			err = sw.AddUnconditionalPeerIDs(splitAndTrimEmpty(config.P2P.UnconditionalPeerIDs, ",", " "))
+		if len(nodeConfig.P2P.UnconditionalPeerIDs) > 0 {
+			err := sw.AddUnconditionalPeerIDs(splitAndTrimEmpty(nodeConfig.P2P.UnconditionalPeerIDs, ",", " "))
 			if err != nil {
-				return nil, fmt.Errorf("could not add peer ids from unconditional_peer_ids field: %w", err)
+				return fmt.Errorf("could not add peer ids from unconditional_peer_ids field: %w", err)
 			}
 		}
 
-		switchMultiplex[userScopeHash] = sw
+		reactor.RegisterService(userScopeHash, "eventSwitch", sw)
 	}
 
 	p2pLogger.Info("P2P Node ID", "ID", nodeKey.ID(), "file", config.NodeKeyFile())
-	return switchMultiplex, nil
+	return nil
 }
 
 func createAddressBooksAndSetOnSwitches(
 	config *cfg.Config,
-	userScopeHashes []string,
-	switchMultiplex MultiplexSwitch,
 	p2pLogger log.Logger,
 	nodeKey *p2p.NodeKey,
-) (MultiplexAddressBook, error) {
-	// Uses a singleton scope registry to create SHA256 once
-	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	addressBookMultiplex := make(MultiplexAddressBook, len(userScopeHashes))
+	reactor *Reactor,
+) error {
+	// Service provider is used to retrieve event switches
+	serviceProvider := reactor.GetServiceProvider()
+	scopeRegistry := reactor.GetScopeRegistry()
+	userScopeHashes := scopeRegistry.GetScopeHashes()
 	addressBookPaths := make(map[string]string, len(userScopeHashes))
 
 	for _, userAddress := range config.GetAddresses() {
@@ -670,7 +573,7 @@ func createAddressBooksAndSetOnSwitches(
 			// Query scope hash from registry to avoid re-creating SHA256
 			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			// The folder name is the hex representation of the fingerprint
@@ -685,88 +588,87 @@ func createAddressBooksAndSetOnSwitches(
 	}
 
 	for _, userScopeHash := range userScopeHashes {
-		if _, ok := switchMultiplex[userScopeHash]; !ok {
-			return nil, fmt.Errorf("could not find switch in multiplex with scope hash %s", userScopeHash)
-		}
+		nodeConfig := reactor.GetReplNodeConfig(userScopeHash)
 
 		if _, ok := addressBookPaths[userScopeHash]; !ok {
-			return nil, fmt.Errorf("could not find address book path with scope hash %s", userScopeHash)
+			return fmt.Errorf("could not find address book path with scope hash %s", userScopeHash)
 		}
 
 		scopedDir := addressBookPaths[userScopeHash]
 		addrBookFile := filepath.Join(scopedDir, cfg.DefaultAddrBookName)
 
 		if _, err := os.Stat(scopedDir); err != nil {
-			return nil, fmt.Errorf("could not open address book file %s: %w", addrBookFile, err)
+			return fmt.Errorf("could not open address book file %s: %w", addrBookFile, err)
 		}
 
-		addrBook := pex.NewAddrBook(addrBookFile, config.P2P.AddrBookStrict)
+		addrBook := pex.NewAddrBook(addrBookFile, nodeConfig.P2P.AddrBookStrict)
 		addrBook.SetLogger(p2pLogger.With("book", addrBookFile))
 
 		// Add ourselves to addrbook to prevent dialing ourselves
-		if config.P2P.ExternalAddress != "" {
-			addr, err := p2p.NewNetAddressString(p2p.IDAddressString(nodeKey.ID(), config.P2P.ExternalAddress))
+		if nodeConfig.P2P.ExternalAddress != "" {
+			addr, err := p2p.NewNetAddressString(p2p.IDAddressString(nodeKey.ID(), nodeConfig.P2P.ExternalAddress))
 			if err != nil {
-				return nil, fmt.Errorf("p2p.external_address is incorrect: %w", err)
+				return fmt.Errorf("p2p.external_address is incorrect: %w", err)
 			}
 			addrBook.AddOurAddress(addr)
 		}
-		if config.P2P.ListenAddress != "" {
-			addr, err := p2p.NewNetAddressString(p2p.IDAddressString(nodeKey.ID(), config.P2P.ListenAddress))
+		if nodeConfig.P2P.ListenAddress != "" {
+			addr, err := p2p.NewNetAddressString(p2p.IDAddressString(nodeKey.ID(), nodeConfig.P2P.ListenAddress))
 			if err != nil {
-				return nil, fmt.Errorf("p2p.laddr is incorrect: %w", err)
+				return fmt.Errorf("p2p.laddr is incorrect: %w", err)
 			}
 			addrBook.AddOurAddress(addr)
 		}
 
-		sw := switchMultiplex[userScopeHash]
+		// Add private IDs to addrbook to block those peers being added
+		addrBook.AddPrivateIDs(splitAndTrimEmpty(nodeConfig.P2P.PrivatePeerIDs, ",", " "))
+
+		sw := serviceProvider(userScopeHash, "eventSwitch").(*ScopedSwitch)
 		sw.SetAddrBook(addrBook)
-		addressBookMultiplex[userScopeHash] = addrBook
 	}
 
-	return addressBookMultiplex, nil
+	return nil
 }
 
 func createPEXReactorsAndAddToSwitches(
-	userScopeHashes []string,
-	addressBookMultiplex MultiplexAddressBook,
 	config *cfg.Config,
-	switchMultiplex MultiplexSwitch,
 	logger log.Logger,
-) (map[string]*pex.Reactor, error) {
-	pexReactors := make(map[string]*pex.Reactor, len(userScopeHashes))
-	for _, userScopeHash := range userScopeHashes {
-		if _, ok := switchMultiplex[userScopeHash]; !ok {
-			return nil, fmt.Errorf("could not find switch in multiplex with scope hash %s", userScopeHash)
-		}
+	reactor *Reactor,
+) error {
+	// Service provider is used to retrieve event switches
+	serviceProvider := reactor.GetServiceProvider()
+	scopeRegistry := reactor.GetScopeRegistry()
+	userScopeHashes := scopeRegistry.GetScopeHashes()
 
-		addrBook, ok := addressBookMultiplex[userScopeHash]
-		if !ok {
-			return nil, fmt.Errorf("could not find address book in multiplex with scope hash %s", userScopeHash)
-		}
+	// pexReactors := make(map[string]*pex.Reactor, len(userScopeHashes))
+	for _, userScopeHash := range userScopeHashes {
+		sw := serviceProvider(userScopeHash, "eventSwitch").(*ScopedSwitch)
+		addrBook := sw.GetAddrBook().(pex.AddrBook)
+		nodeConfig := reactor.GetReplNodeConfig(userScopeHash)
 
 		// TODO persistent peers ? so we can have their DNS addrs saved
 		pexReactor := pex.NewReactor(addrBook,
 			&pex.ReactorConfig{
-				Seeds:    splitAndTrimEmpty(config.P2P.Seeds, ",", " "),
-				SeedMode: config.P2P.SeedMode,
+				Seeds:    splitAndTrimEmpty(nodeConfig.P2P.Seeds, ",", " "),
+				SeedMode: nodeConfig.P2P.SeedMode,
 				// See consensus/reactor.go: blocksToContributeToBecomeGoodPeer 10000
 				// blocks assuming 10s blocks ~ 28 hours.
 				// TODO (melekes): make it dynamic based on the actual block latencies
 				// from the live network.
 				// https://github.com/tendermint/tendermint/issues/3523
 				SeedDisconnectWaitPeriod:     28 * time.Hour,
-				PersistentPeersMaxDialPeriod: config.P2P.PersistentPeersMaxDialPeriod,
+				PersistentPeersMaxDialPeriod: nodeConfig.P2P.PersistentPeersMaxDialPeriod,
 			})
 		pexReactor.SetLogger(logger.With("module", "pex"))
 
-		sw := switchMultiplex[userScopeHash]
+		// sw := switchMultiplex[userScopeHash]
 		sw.AddReactor("PEX", pexReactor)
 
-		pexReactors[userScopeHash] = pexReactor
+		// pexReactors[userScopeHash] = pexReactor
 	}
 
-	return pexReactors, nil
+	// return pexReactors, nil
+	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -829,7 +731,6 @@ func DefaultMultiplexNode(config *cfg.Config, logger log.Logger) (*NodeRegistry,
 	return NewMultiplexNode(
 		context.Background(),
 		config,
-		//privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		PluralUserGenesisDocProviderFunc(config),
@@ -844,19 +745,17 @@ func DefaultMultiplexNode(config *cfg.Config, logger log.Logger) (*NodeRegistry,
 // or many state instances in the resulting state multiplex.
 func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	stateMultiplexDB MultiplexDB,
-	genesisDocProvider node.GenesisDocProvider,
+	// genesisDocProvider node.GenesisDocProvider,
 	operatorGenesisHashHex string,
 	config *cfg.Config,
+	reactor *Reactor,
 ) (multiplexState MultiplexState, icsGenDoc node.IChecksummedGenesisDoc, err error) {
-	icsGenDoc, err = genesisDocProvider()
-	if err != nil {
-		return MultiplexState{}, nil, err
-	}
-
 	mxConfig := NewUserConfig(config.Replication, config.UserScopes, config.ListenPort)
 	replicatedChains := mxConfig.GetScopeHashes()
 	numReplicatedChains := len(replicatedChains)
 	multiplexState = make(MultiplexState, numReplicatedChains)
+
+	genesisDocProvider := reactor.GetGenesisProvider()
 
 	// Validate plural genesis configuration
 	// Then get genesis doc set hashes from dbs or update
@@ -864,7 +763,8 @@ func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	// it should save each GenesisDoc's SHA256 in the corresponding DB.
 	var genDocSetHashes [][]byte
 	for _, userScopeHash := range replicatedChains {
-		csGenDoc, err := icsGenDoc.GenesisDocByScope(userScopeHash)
+		icsGenDoc := reactor.GetChecksummedGenesisDoc()
+		csGenDoc, err := genesisDocProvider(userScopeHash)
 		if err != nil {
 			return MultiplexState{}, nil, fmt.Errorf(
 				"error retrieving genesis doc for scope hash %s: %w", userScopeHash, err,

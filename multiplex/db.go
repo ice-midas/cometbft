@@ -25,9 +25,9 @@ type ScopedDB struct {
 // ----------------------------------------------------------------------------
 // Multiplex providers
 
-// MultiplexDBProvider returns multiple databases using the DBBackend and DBDir
+// OpenMultiplexDB returns multiple databases using the DBBackend and DBDir
 // specified in the Config and uses two levels of subfolders for user and scope.
-func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
+func OpenMultiplexDB(ctx *ScopedDBContext) (multiplex MultiplexDB, err error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 
 	// This multiplex maps scope hashes to scoped database folders
@@ -43,7 +43,6 @@ func MultiplexDBProvider(ctx *ScopedDBContext) (multiplex MultiplexDB, err error
 		// Uses one subfolder by user
 		dbStorage := filepath.Join(ctx.Config.DBDir(), userAddress)
 
-		// FIXME: must use scope fingerprints to avoid storage issues
 		for _, scope := range ctx.Config.UserScopes[userAddress] {
 			scopeHash, err := scopeRegistry.GetScopeHash(userAddress, scope)
 			if err != nil {

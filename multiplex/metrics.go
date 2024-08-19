@@ -14,51 +14,76 @@ import (
 	"github.com/cometbft/cometbft/store"
 )
 
-// SharedMetricsProvider returns a consensus, p2p and mempool Metrics.
-type SharedMetricsProvider func(chainID string) (
-	*sm.Metrics,
-	*store.Metrics,
-	*p2p.Metrics,
-)
+// SharedMetrics contains pointers to prometheus metrics instances
+// configured with a node ID ("globally"/"shared"). These metrics
+// are shared across one node instance and not chain-specific.
+type SharedMetrics struct {
+	StateMetrics *sm.Metrics
+	StoreMetrics *store.Metrics
+	P2PMetrics   *p2p.Metrics
+}
 
-// ReplicatedMetricsProvider returns a consensus, p2p and mempool Metrics.
-type ReplicatedMetricsProvider func(chainID string, userScopeHash string) (
-	*cs.Metrics,
-	*mempl.Metrics,
-	*sm.Metrics,
-	*proxy.Metrics,
-	*blocksync.Metrics,
-	*statesync.Metrics,
-)
+// ReplicatedMetrics contains pointers to prometheus metrics instances
+// configured with a chain ID and scope hash. These metrics are specific
+// to one replicated chain.
+type ReplicatedMetrics struct {
+	StateMetrics     *sm.Metrics
+	StoreMetrics     *store.Metrics
+	ConsensusMetrics *cs.Metrics
+	MempoolMetrics   *mempl.Metrics
+	ProxyMetrics     *proxy.Metrics
+	BlockSyncMetrics *blocksync.Metrics
+	StateSyncMetrics *statesync.Metrics
+}
 
-// ----------------------------------------------------------------------------
-// Multiplex providers
+// SharedMetricsProvider returns a [SharedMetrics] instance by scope hash.
+type SharedMetricsProvider func(nodeID string) SharedMetrics
+
+// ReplicatedMetricsProvider returns a [ReplicatedMetrics] instance by scope hash.
+type ReplicatedMetricsProvider func(chainID string, userScopeHash string) ReplicatedMetrics
 
 // GlobalMetricsProvider returns Metrics built using Prometheus client library
 // if Prometheus is enabled. Otherwise, it returns no-op Metrics.
 func GlobalMetricsProvider(config *cfg.InstrumentationConfig) SharedMetricsProvider {
-	return func(chainID string) (*sm.Metrics, *store.Metrics, *p2p.Metrics) {
+	return func(nodeID string) SharedMetrics {
 		if config.Prometheus {
-			return sm.PrometheusMetrics(config.Namespace, "chain_id", chainID),
-				store.PrometheusMetrics(config.Namespace, "chain_id", chainID),
-				p2p.PrometheusMetrics(config.Namespace, "chain_id", chainID)
+			return SharedMetrics{
+				StateMetrics: sm.PrometheusMetrics(config.Namespace, "node_id", nodeID),
+				StoreMetrics: store.PrometheusMetrics(config.Namespace, "node_id", nodeID),
+				P2PMetrics:   p2p.PrometheusMetrics(config.Namespace, "node_id", nodeID),
+			}
 		}
-		return sm.NopMetrics(), store.NopMetrics(), p2p.NopMetrics()
+		return SharedMetrics{
+			StateMetrics: sm.NopMetrics(),
+			StoreMetrics: store.NopMetrics(),
+			P2PMetrics:   p2p.NopMetrics(),
+		}
 	}
 }
 
 // MultiplexMetricsProvider returns Metrics built using Prometheus client library
 // if Prometheus is enabled and adds the scope hash in context. Otherwise, it returns no-op Metrics.
 func MultiplexMetricsProvider(config *cfg.InstrumentationConfig) ReplicatedMetricsProvider {
-	return func(chainID string, userScopeHash string) (*cs.Metrics, *mempl.Metrics, *sm.Metrics, *proxy.Metrics, *blocksync.Metrics, *statesync.Metrics) {
+	return func(chainID string, userScopeHash string) ReplicatedMetrics {
 		if config.Prometheus {
-			return cs.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
-				mempl.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
-				sm.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
-				proxy.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
-				blocksync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
-				statesync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash)
+			return ReplicatedMetrics{
+				StateMetrics:     sm.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				StoreMetrics:     store.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				ConsensusMetrics: cs.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				MempoolMetrics:   mempl.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				ProxyMetrics:     proxy.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				BlockSyncMetrics: blocksync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+				StateSyncMetrics: statesync.PrometheusMetrics(config.Namespace, "chain_id", chainID, "scope", userScopeHash),
+			}
 		}
-		return cs.NopMetrics(), mempl.NopMetrics(), sm.NopMetrics(), proxy.NopMetrics(), blocksync.NopMetrics(), statesync.NopMetrics()
+		return ReplicatedMetrics{
+			StateMetrics:     sm.NopMetrics(),
+			StoreMetrics:     store.NopMetrics(),
+			ConsensusMetrics: cs.NopMetrics(),
+			MempoolMetrics:   mempl.NopMetrics(),
+			ProxyMetrics:     proxy.NopMetrics(),
+			BlockSyncMetrics: blocksync.NopMetrics(),
+			StateSyncMetrics: statesync.NopMetrics(),
+		}
 	}
 }
