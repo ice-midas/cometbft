@@ -76,6 +76,11 @@ func NewReactor(consensusState *State, waitSync bool, options ...ReactorOption) 
 	return conR
 }
 
+// GetState returns a pointer to the consensus state instance.
+func (conR *Reactor) GetState() *State {
+	return conR.conS
+}
+
 // OnStart implements BaseService by subscribing to events, which later will be
 // broadcasted to other peers and starting state if we're not in block sync.
 func (conR *Reactor) OnStart() error {

@@ -13,6 +13,7 @@ import (
 	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/protoio"
+	"github.com/cometbft/cometbft/libs/service"
 	"github.com/cometbft/cometbft/p2p/conn"
 )
 
@@ -137,7 +138,11 @@ type TransportHandshakeFn func(net.Conn, time.Duration, NodeInfo) (NodeInfo, err
 
 // MultiplexTransport accepts and dials tcp connections and upgrades them to
 // multiplexed peers.
+//
+// [service.BaseService] is embedded for instance reuse in plural replication mode.
 type MultiplexTransport struct {
+	service.BaseService
+
 	netAddr                NetAddress
 	listener               net.Listener
 	maxIncomingConnections int // see MaxIncomingConnections
