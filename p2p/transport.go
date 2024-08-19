@@ -56,6 +56,17 @@ type peerConfig struct {
 	metrics       *Metrics
 }
 
+// PublicPeerConfig describes a wrapper around peer configuration structs.
+// TODO(midas): does peerConfig need to be private? Maybe split into public/private parts.
+type PublicPeerConfig struct {
+	peerConfig
+}
+
+// GetConfig returns the internal peerConfig configuration struct.
+func (c PublicPeerConfig) GetConfig() peerConfig {
+	return c.peerConfig
+}
+
 // Transport emits and connects to Peers. The implementation of Peer is left to
 // the transport. Each transport is also responsible to filter establishing
 // peers specific to its domain.

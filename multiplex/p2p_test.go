@@ -102,12 +102,12 @@ func BenchmarkP2PTransport1K(b *testing.B) {
 // ----------------------------------------------------------------------------
 // Mocks and Test Helpers
 
-var cfg *config.P2PConfig
+var p2pConf *config.P2PConfig
 
 func init() {
-	cfg = config.DefaultP2PConfig()
-	cfg.PexReactor = true
-	cfg.AllowDuplicateIP = true
+	p2pConf = config.DefaultP2PConfig()
+	p2pConf.PexReactor = true
+	p2pConf.AllowDuplicateIP = true
 }
 
 type PeerMessage struct {
@@ -244,7 +244,7 @@ func ResetP2PTransportTestRoot(t testing.TB, testName string, numNodes int) (str
 // XXX: note this uses net.Pipe and not a proper TCP conn.
 func MakeSwitchPair(initSwitch func(int, *p2p.Switch) *p2p.Switch) (*p2p.Switch, *p2p.Switch) {
 	// Create two switches that will be interconnected.
-	switches := p2p.MakeConnectedSwitches(cfg, 2, initSwitch, p2p.Connect2Switches)
+	switches := p2p.MakeConnectedSwitches(p2pConf, 2, initSwitch, p2p.Connect2Switches)
 	return switches[0], switches[1]
 }
 
