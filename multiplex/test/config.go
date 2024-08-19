@@ -10,12 +10,20 @@ import (
 	"strings"
 
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 	cmttest "github.com/cometbft/cometbft/internal/test"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/privval"
 )
+
+func defaultPrivateKeyGenFunc() func() (crypto.PrivKey, error) {
+	return func() (crypto.PrivKey, error) {
+		return ed25519.GenPrivKey(), nil
+	}
+}
 
 func ResetMultiplexPrivValidator(
 	cfg config.BaseConfig,
@@ -54,7 +62,8 @@ func ResetMultiplexPrivValidator(
 
 	if privValidator == nil {
 		// IMPORTANT: This generates a random privValidator private key
-		filePV = privval.GenFilePV(privValKeyFile, privValStateFile)
+		// TODO(midas): should not ignore if an error is produced.
+		filePV, _ = privval.GenFilePV(privValKeyFile, privValStateFile, defaultPrivateKeyGenFunc())
 	} else {
 		filePV = privValidator
 	}
@@ -242,7 +251,11 @@ func GeneratePrivValidators(testName string, numValidators int) []*privval.FileP
 		privValKeyFile := filepath.Join(tempDir, indexPrivVal+"_priv_validator_key.json")
 		privValStateFile := filepath.Join(tempDir, indexPrivVal+"_priv_validator_state.json")
 
-		filePV := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile)
+		filePV, err := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile, defaultPrivateKeyGenFunc())
+		if err != nil {
+			panic(err)
+		}
+
 		privVals[i] = filePV
 	}
 

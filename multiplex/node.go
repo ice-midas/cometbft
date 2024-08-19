@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	cfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	bc "github.com/cometbft/cometbft/internal/blocksync"
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	"github.com/cometbft/cometbft/internal/evidence"
@@ -63,10 +65,16 @@ func NewMultiplexNode(ctx context.Context,
 	// node implementation used is `node/node.go`, i.e. no multiplex.
 	if config.Replication == cfg.SingularReplicationMode() {
 		// Uses the default privValidator from config (FilePV)
-		privValidator := privval.LoadOrGenFilePV(
+		privValidator, err := privval.LoadOrGenFilePV(
 			config.PrivValidatorKeyFile(),
 			config.PrivValidatorStateFile(),
+			func() (crypto.PrivKey, error) {
+				return ed25519.GenPrivKey(), nil
+			},
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		readyNode, err := node.NewNode(
 			ctx,

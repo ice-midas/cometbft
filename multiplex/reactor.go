@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	"github.com/cometbft/cometbft/libs/log"
 	cmtlibs "github.com/cometbft/cometbft/libs/service"
@@ -633,10 +635,16 @@ func (r *Reactor) startNodeListeners(scopeHash string) error {
 		privValKeyDir := filepath.Join(userConfDir, folderName)
 		privValStateDir := filepath.Join(userDataDir, folderName)
 
-		privValidator = privval.LoadOrGenFilePV(
+		privValidator, err = privval.LoadOrGenFilePV(
 			filepath.Join(privValKeyDir, filepath.Base(nodeConfig.PrivValidatorKeyFile())),
 			filepath.Join(privValStateDir, filepath.Base(nodeConfig.PrivValidatorStateFile())),
+			func() (crypto.PrivKey, error) {
+				return ed25519.GenPrivKey(), nil
+			},
 		)
+		if err != nil {
+			return err
+		}
 	} else {
 		// If an address is provided, listen on the socket for a connection from an
 		// external signing process.

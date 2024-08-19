@@ -321,6 +321,11 @@ func (mt *MultiplexTransport) Listen(addr NetAddress) error {
 	return nil
 }
 
+// GetListener returns the listener instance
+func (mt *MultiplexTransport) GetListener() net.Listener {
+	return mt.listener
+}
+
 // AddChannel registers a channel to nodeInfo.
 // NOTE: NodeInfo must be of type DefaultNodeInfo else channels won't be updated
 // This is a bit messy at the moment but is cleaned up in the following version

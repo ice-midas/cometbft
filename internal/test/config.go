@@ -40,13 +40,14 @@ func resetTestRoot(testName string, chainID string, overwritePrivKey bool) *conf
 		testGenesis := fmt.Sprintf(testGenesisFmt, chainID)
 		cmtos.MustWriteFile(genesisFilePath, []byte(testGenesis), 0o644)
 	}
-	
-    if overwritePrivKey {
-	    ResetTestPrivValidator(rootDir, baseConfig)
+
+	if overwritePrivKey {
+		ResetTestPrivValidator(rootDir, baseConfig)
 	} else {
-        // We always overwrite at least the state
-        cmtos.MustWriteFile(privStateFilePath, []byte(testPrivValidatorState), 0o644)
-    }
+		// We always overwrite at least the state
+		privStateFilePath := filepath.Join(rootDir, baseConfig.PrivValidatorState)
+		cmtos.MustWriteFile(privStateFilePath, []byte(testPrivValidatorState), 0o644)
+	}
 
 	config := config.TestConfig().SetRoot(rootDir)
 	return config

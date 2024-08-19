@@ -18,6 +18,8 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 	cfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	cmttest "github.com/cometbft/cometbft/internal/test"
@@ -46,10 +48,17 @@ func TestMultiplexNodeLegacyGenesis(t *testing.T) {
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	require.NoError(t, err)
 
+	privValidator, err := privval.LoadOrGenFilePV(
+		config.PrivValidatorKeyFile(),
+		config.PrivValidatorStateFile(),
+		useDefaultKeyGenFunc(),
+	)
+	require.NoError(t, err)
+
 	n, err := cmtnode.NewNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
+		privValidator,
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		cmtnode.DefaultGenesisDocProviderFunc(config),
@@ -914,6 +923,12 @@ func BenchmarkMultiplexNodeTriggerConsensusTwelveChains(t *testing.B) {
 
 // ----------------------------------------------------------------------------
 
+func useDefaultKeyGenFunc() func() (crypto.PrivKey, error) {
+	return func() (crypto.PrivKey, error) {
+		return ed25519.GenPrivKey(), nil
+	}
+}
+
 func usePrivValidatorFromFiles(t testing.TB, n *ScopedNode, config *cfg.Config, userAddress string) {
 	t.Helper()
 
@@ -930,7 +945,8 @@ func usePrivValidatorFromFiles(t testing.TB, n *ScopedNode, config *cfg.Config, 
 
 	// Reload the priv validator from files. This overwrites the PrivValidator
 	// so that it uses the default privval or a generated privval.
-	newPV := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile)
+	newPV, err := privval.LoadOrGenFilePV(privValKeyFile, privValStateFile, useDefaultKeyGenFunc())
+	require.NoError(t, err)
 	t.Logf("Using priv validator from files: %s\n", newPV.GetAddress())
 
 	n.SetPrivValidator(newPV)
@@ -1074,10 +1090,17 @@ func assertStartLegacyNode(t testing.TB, testName string) (*cfg.Config, *cmtnode
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	require.NoError(t, err)
 
+	privValidator, err := privval.LoadOrGenFilePV(
+		config.PrivValidatorKeyFile(),
+		config.PrivValidatorStateFile(),
+		useDefaultKeyGenFunc(),
+	)
+	require.NoError(t, err)
+
 	n, err := cmtnode.NewNode(
 		context.Background(),
 		config,
-		privval.LoadOrGenFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile()),
+		privValidator,
 		nodeKey,
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		cmtnode.DefaultGenesisDocProviderFunc(config),
