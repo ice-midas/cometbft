@@ -32,6 +32,10 @@ func initFiles(*cobra.Command, []string) error {
 }
 
 func initFilesWithConfig(config *cfg.Config) error {
+	// EnsureRoot removed in cmd/root.go in favor of EnsureFilesystem,
+	// so we need to EnsureConfig here to write the config file.
+	cfg.EnsureConfig(config.RootDir, cfg.DefaultConfig())
+
 	// private validator
 	privValKeyFile := config.PrivValidatorKeyFile()
 	privValStateFile := config.PrivValidatorStateFile()
@@ -51,6 +55,7 @@ func initFilesWithConfig(config *cfg.Config) error {
 			"stateFile", privValStateFile)
 	}
 
+	// node key file
 	nodeKeyFile := config.NodeKeyFile()
 	if cmtos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
