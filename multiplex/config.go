@@ -179,6 +179,9 @@ func NewMultiplexNodeConfig(
 	newNodeConfig.Consensus.SetWalFile(walFile)
 	newNodeConfig.Consensus.WalPath = walPath
 
+	// TODO(midas): ProxyApp overwrite should not be necessary but required
+	//              until the proxy_app config is updated.
+	newNodeConfig.ProxyApp = "kvstore"
 	return newNodeConfig
 }
 

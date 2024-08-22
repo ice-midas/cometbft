@@ -401,6 +401,7 @@ func createConsensusReactor(config *cfg.Config,
 		evidencePool,
 		cs.StateMetrics(csMetrics),
 		cs.OfflineStateSyncHeight(offlineStateSyncHeight),
+		cs.UseScopeHash(state.ScopeHash),
 	)
 	consensusState.SetLogger(consensusLogger)
 	if privValidator != nil {

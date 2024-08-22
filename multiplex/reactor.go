@@ -53,7 +53,7 @@ type Reactor struct {
 	confMutex  sync.RWMutex
 	replConfig MultiplexNodeConfig
 
-	pvMutex    sync.Mutex
+	pvMutex    sync.RWMutex
 	mxPrivVals MultiplexPrivValidator
 	peerFilter MultiplexPeerFilterFunc
 
@@ -70,6 +70,8 @@ type Reactor struct {
 	// Registries for node services and network
 	scopeRegistry   *ScopeRegistry
 	serviceProvider ServiceProvider
+
+	serviceMutex    sync.RWMutex
 	serviceRegistry MultiplexService
 
 	// State and consensus providers
@@ -143,6 +145,9 @@ func NewReactor(
 
 	// Use the service registry to load node services
 	r.serviceProvider = func(scopeHash string, serviceName string) cmtlibs.Service {
+		r.serviceMutex.RLock()
+		defer r.serviceMutex.RUnlock()
+
 		if _, ok := r.serviceRegistry[scopeHash]; !ok {
 			panic(fmt.Errorf("could not load services for scope hash %s", scopeHash))
 		}
@@ -213,6 +218,9 @@ func (r *Reactor) GetReplNodeConfig(userScopeHash string) *cmtcfg.Config {
 
 // GetReplPrivValidator returns a [types.PrivValidator] instance (per-chain priv validator)
 func (r *Reactor) GetReplPrivValidator(userScopeHash string) types.PrivValidator {
+	r.pvMutex.RLock()
+	defer r.pvMutex.RUnlock()
+
 	return r.mxPrivVals[userScopeHash]
 }
 
@@ -320,6 +328,9 @@ func (r *Reactor) RegisterService(
 	serviceName string,
 	service cmtlibs.Service,
 ) {
+	r.serviceMutex.Lock()
+	defer r.serviceMutex.Unlock()
+
 	// Allocate if necessary
 	if _, ok := r.serviceRegistry[scopeHash]; !ok {
 		r.serviceRegistry[scopeHash] = map[string]cmtlibs.Service{}
@@ -569,7 +580,6 @@ func (r *Reactor) startNodeListeners(scopeHash string) error {
 		return err
 	}
 
-	userConfDir := filepath.Join(nodeConfig.RootDir, cmtcfg.DefaultConfigDir, userAddress)
 	userDataDir := filepath.Join(nodeConfig.RootDir, cmtcfg.DefaultDataDir, userAddress)
 	clientCreator := proxy.DefaultClientCreator(nodeConfig.ProxyApp, nodeConfig.ABCI, userDataDir)
 
@@ -607,7 +617,7 @@ func (r *Reactor) startNodeListeners(scopeHash string) error {
 	var privValidator types.PrivValidator
 	if nodeConfig.PrivValidatorListenAddr == "" {
 		folderName := scopeId.Fingerprint()
-		privValKeyDir := filepath.Join(userConfDir, folderName)
+		privValKeyDir := filepath.Join(userDataDir, folderName)
 		privValStateDir := filepath.Join(userDataDir, folderName)
 
 		privValidator, err = privval.LoadOrGenFilePV(
