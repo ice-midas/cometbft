@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"sync"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
@@ -41,6 +39,9 @@ const (
 // Peer#Send or Peer#TrySend should be used to send the message to a peer.
 type Reactor struct {
 	p2p.BaseReactor // BaseService + p2p.Switch
+
+	// Listen addresses multiplex
+	laddrMutex      sync.RWMutex
 	ListenAddresses MultiplexServiceAddress
 
 	// Node services/config
@@ -122,7 +123,7 @@ func NewReactor(
 		logger:            logger,
 
 		// services, metrics
-		scopeRegistry:        &scopeRegistry,
+		scopeRegistry:        scopeRegistry,
 		shareMetricsProvider: shareMetricsProvider,
 		chainMetricsProvider: chainMetricsProvider,
 	}
@@ -160,9 +161,6 @@ func NewReactor(
 
 // ----------------------------------------------------------------------------
 // Reactor public getters
-
-// GetNodeConfig returns a [cmtcfg.Config] instance (node config)
-func (r *Reactor) GetNodeConfig() *cmtcfg.Config { return r.nodeConfig }
 
 // GetUserConfig returns a [ScopedUserConfig] instance (multiplex users config)
 func (r *Reactor) GetUserConfig() *ScopedUserConfig { return r.userConfig }
@@ -385,15 +383,34 @@ func (r *Reactor) OnStart() error {
 	// ------------------------------------------------------------------------
 	// Replicated chains
 
+	r.laddrMutex.Lock()
 	r.ListenAddresses = make(MultiplexServiceAddress, len(r.replChains))
+	r.laddrMutex.Unlock()
 
 	// For each scope hash, we run a node with a distinct listen address
-	for i, userScopeHash := range r.replChains {
+	for _, userScopeHash := range r.replChains {
 		scopeId := NewScopeIDFromHash(userScopeHash)
 		r.logger.With("scope", scopeId.Fingerprint())
 
 		// Overwrite the p2p and rpc ports
-		r.updateNodeConfig(userScopeHash, i)
+		r.confMutex.Lock()
+		r.replConfig[userScopeHash] = NewMultiplexNodeConfig(
+			r.nodeConfig,
+			r.userConfig,
+			r.scopeRegistry,
+			userScopeHash,
+		)
+		nodeConfig := r.replConfig[userScopeHash]
+		r.confMutex.Unlock()
+
+		r.laddrMutex.Lock()
+		r.ListenAddresses[userScopeHash] = map[string]string{
+			"P2P":      nodeConfig.P2P.ListenAddress,
+			"RPC":      nodeConfig.RPC.ListenAddress,
+			"GRPC":     nodeConfig.GRPC.ListenAddress,
+			"GRPCPriv": nodeConfig.GRPC.Privileged.ListenAddress,
+		}
+		r.laddrMutex.Unlock()
 
 		// Non-blocking execution using different goroutine
 		// i.e. one goroutine per each replicated chain
@@ -529,49 +546,6 @@ func (r *Reactor) loadMultiplexState() error {
 	return nil
 }
 
-// updateNodeConfig updates the node configuration and overwrites
-// the services listen addresses with the following config:
-//
-// - P2P: legacy `26656`, multiplex `30001`...`3000x` with x the index of nodes
-// - RPC: legacy `26657`, multiplex `31001`...`3100x`
-// - gRPC: legacy `26670`, multiplex `32001`...`3200x`
-// - Privileged gRPC: legacy `26671`, multiplex `33001`...`3300x`
-//
-// This method must be called before one of replConfig
-// and ListenAddresses may be used.
-func (r *Reactor) updateNodeConfig(scopeHash string, i int) error {
-	// Multiplex can be configured to start at different port
-	startPort := r.userConfig.GetListenPort() // defaults to 30001
-
-	newP2PPort := ":" + strconv.Itoa(startPort+i)           // defaults to 30001, 2nd chain 30002, etc.
-	newRPCPort := ":" + strconv.Itoa(startPort+1000+i)      // defaults to 31001
-	newGRPCPort := ":" + strconv.Itoa(startPort+2000+i)     // defaults to 32001
-	newGRPCPrivPort := ":" + strconv.Itoa(startPort+3000+i) // defaults to 33001
-
-	re := regexp.MustCompile(`(.*)(\:\d+)(.*)`)
-	r.ListenAddresses[scopeHash] = map[string]string{
-		"P2P":      re.ReplaceAllString(r.nodeConfig.P2P.ListenAddress, `$1`+newP2PPort+`$3`),
-		"RPC":      re.ReplaceAllString(r.nodeConfig.RPC.ListenAddress, `$1`+newRPCPort+`$3`),
-		"GRPC":     re.ReplaceAllString(r.nodeConfig.GRPC.ListenAddress, `$1`+newGRPCPort+`$3`),
-		"GRPCPriv": re.ReplaceAllString(r.nodeConfig.GRPC.Privileged.ListenAddress, `$1`+newGRPCPrivPort+`$3`),
-	}
-
-	// Deep-copy the config object to create multiple nodes
-	newNodeConfig := cmtcfg.NewConfigCopy(r.nodeConfig)
-	newNodeConfig.SetListenAddresses(
-		r.ListenAddresses[scopeHash]["P2P"],
-		r.ListenAddresses[scopeHash]["RPC"],
-		r.ListenAddresses[scopeHash]["GRPC"],
-		r.ListenAddresses[scopeHash]["GRPCPriv"],
-	)
-
-	// Concurrency-safe RW
-	r.confMutex.Lock()
-	r.replConfig[scopeHash] = newNodeConfig
-	r.confMutex.Unlock()
-	return nil
-}
-
 // startNodeListeners is called in a parallel goroutine and is responsible for
 // starting the following node listeners:
 //
@@ -600,6 +574,7 @@ func (r *Reactor) startNodeListeners(scopeHash string) error {
 	clientCreator := proxy.DefaultClientCreator(nodeConfig.ProxyApp, nodeConfig.ABCI, userDataDir)
 
 	// 1) ABCI Server (--proxy_app)
+	// TODO(midas): the ABCI server doesn't need to be replicated for each chain.
 	proxyApp := proxy.NewAppConns(clientCreator, replicatedMetrics.ProxyMetrics)
 	proxyApp.SetLogger(r.logger.With("module", "proxy"))
 	if err := proxyApp.Start(); err != nil {

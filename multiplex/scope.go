@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -18,6 +19,7 @@ import (
 
 const (
 	fingerprintSize = 8
+	scopesSeparator = ":"
 )
 
 // scopeID embeds a string and adds a scope hash
@@ -53,6 +55,24 @@ func (s *scopeID) String() string {
 	return s.string
 }
 
+// Parts returns the two parts of a scope description.
+func (s *scopeID) Parts() [2]string {
+	if len(s.string) == 0 {
+		return [2]string{"", ""}
+	}
+
+	// Index returns first instance of token
+	separatorAt := strings.Index(s.string, scopesSeparator)
+	if separatorAt == -1 {
+		return [2]string{s.string, ""}
+	}
+
+	return [2]string{
+		s.string[:separatorAt],
+		s.string[separatorAt+1:],
+	}
+}
+
 // -----------------------------------------------------------------------------
 // ScopeRegistry
 // A registry pattern implementation, searchable by user address and scope.
@@ -69,16 +89,23 @@ type ScopeRegistry struct {
 	UsersScopes UserScopeMap
 }
 
+// GetScopeHashes returns a slice of all scope hashes
+//
+// Hashes are always sorted lexicographically.
 func (r *ScopeRegistry) GetScopeHashes() []string {
 	var allHashes []string
 	for _, scopeHashes := range r.ScopeHashes {
 		allHashes = append(allHashes, scopeHashes...)
 	}
 
+	// Sort hashes lexicographically
+	sort.Strings(allHashes)
 	return allHashes
 }
 
-// GetScopeHashes returns a slice of scope hashes by user address
+// GetScopeHashesByUser returns a slice of scope hashes by user address
+//
+// Hashes are always sorted lexicographically.
 func (r *ScopeRegistry) GetScopeHashesByUser(
 	userAddress string,
 ) ([]string, error) {
@@ -86,6 +113,8 @@ func (r *ScopeRegistry) GetScopeHashesByUser(
 		return []string{}, errors.New("no scope hashes found for user: " + userAddress)
 	}
 
+	// Sort hashes lexicographically
+	sort.Strings(r.ScopeHashes[userAddress])
 	return r.ScopeHashes[userAddress], nil
 }
 
@@ -105,6 +134,7 @@ func (r *ScopeRegistry) GetScopeHash(
 	return r.UsersScopes[userAddress][scope], nil
 }
 
+// GetAddress tries to find a user address by scope hash or errors if none is found.
 func (r *ScopeRegistry) GetAddress(scopeHash string) (string, error) {
 	for userAddress, hashes := range r.ScopeHashes {
 		if slices.Contains(hashes, scopeHash) {
@@ -115,12 +145,28 @@ func (r *ScopeRegistry) GetAddress(scopeHash string) (string, error) {
 	return "", fmt.Errorf("no address found for scope hash %s", scopeHash)
 }
 
+// GetScopeIndex searches for a scope hash and returns its index or -1 if not found.
+//
+// The index generally represents the index of the replicated chain's scope hash
+// in the scope hash slices, e.g. with scope hashes ['A','B','C'], the index for
+// the node replicating the chain with scope hash 'B' is 1.
+// Hashes are always sorted lexicographically.
+func (r *ScopeRegistry) FindScope(scopeHash string) int {
+	for i, sh := range r.GetScopeHashes() {
+		if sh == scopeHash {
+			return i
+		}
+	}
+
+	return -1
+}
+
 // ----------------------------------------------------------------------------
 // Builders
 
 func NewScopeID(userAddress string, scope string) *scopeID {
 	return &scopeID{
-		string: fmt.Sprintf("%s:%s", userAddress, scope),
+		string: fmt.Sprintf("%s%s%s", userAddress, scopesSeparator, scope),
 	}
 }
 
@@ -144,13 +190,13 @@ type ScopeHashProvider func(*cfg.UserConfig) (ScopeRegistry, error)
 // address and scope can be referred to by a scope hash.
 // This method implementation supports concurrent calls.
 // DefaultScopeHashProvider implements ScopeHashProvider
-func DefaultScopeHashProvider(config *cfg.UserConfig) (ScopeRegistry, error) {
+func DefaultScopeHashProvider(config *cfg.UserConfig) (*ScopeRegistry, error) {
 	if config.Replication == cfg.SingularReplicationMode() {
-		return ScopeRegistry{}, nil
+		return &ScopeRegistry{}, nil
 	}
 
-	cacheableHashProvider := sync.OnceValue(func() ScopeRegistry {
-		registry := ScopeRegistry{}
+	cacheableHashProvider := sync.OnceValue(func() *ScopeRegistry {
+		registry := &ScopeRegistry{}
 		registry.ScopeHashes = UserScopeSet{}
 		registry.UsersScopes = UserScopeMap{}
 
@@ -179,7 +225,7 @@ func DefaultScopeHashProvider(config *cfg.UserConfig) (ScopeRegistry, error) {
 	sRegistry := cacheableHashProvider()
 
 	if config.Replication == cfg.PluralReplicationMode() && len(sRegistry.ScopeHashes) == 0 {
-		return ScopeRegistry{}, errors.New("in plural replication mode, at least one user scope is required")
+		return &ScopeRegistry{}, errors.New("in plural replication mode, at least one user scope is required")
 	}
 
 	return sRegistry, nil

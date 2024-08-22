@@ -2,9 +2,13 @@ package multiplex
 
 import (
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"time"
 
 	cfg "github.com/cometbft/cometbft/config"
+	cmtcfg "github.com/cometbft/cometbft/config"
 )
 
 // ScopedUserConfig embeds UserConfig and computes SHA256 hashes
@@ -52,6 +56,8 @@ func (c *ScopedUserConfig) GetScopeHashes() []string {
 		allHashes = append(allHashes, scopeHashes...)
 	}
 
+	// Sort hashes lexicographically
+	sort.Strings(allHashes)
 	return allHashes
 }
 
@@ -110,6 +116,70 @@ func NewConsensusConfigWithWalFile(walFile string) *cfg.ConsensusConfig {
 		PeerGossipIntraloopSleepDuration: 0 * time.Second,
 		DoubleSignCheckHeight:            int64(0),
 	}
+}
+
+// NewMultiplexNodeConfig updates the node configuration in-place
+// and overwrites the services listen addresses with the config:
+//
+// - P2P: legacy `26656`, multiplex `30001`...`3000x` with x the index of nodes
+// - RPC: legacy `26657`, multiplex `31001`...`3100x`
+// - gRPC: legacy `26670`, multiplex `32001`...`3200x`
+// - Privileged gRPC: legacy `26671`, multiplex `33001`...`3300x`
+//
+// The index generally represents the index of the replicated chain's scope hash
+// in the scope hash slices, e.g. with scope hashes ['A','B','C'], the index for
+// the node replicating the chain with scope hash 'B' is 1.
+// Hashes should always be sorted lexicographically.
+//
+// It returns the newly created deep-copy of the node configuration.
+func NewMultiplexNodeConfig(
+	nodeConfig *cfg.Config,
+	userConfig *ScopedUserConfig,
+	scopeRegistry *ScopeRegistry,
+	scopeHash string,
+) *cmtcfg.Config {
+	// Multiplex can be configured to start at different port
+	startPort := userConfig.GetListenPort() // defaults to 30001
+
+	// Find index of scope hash (deterministic due to sorting)
+	nodeIdx := scopeRegistry.FindScope(scopeHash)
+	address, _ := scopeRegistry.GetAddress(scopeHash)
+	scopeId := scopeHash[:16] // fingerprint 8 bytes
+
+	newP2PPort := ":" + strconv.Itoa(startPort+nodeIdx)           // defaults to 30001, 2nd chain 30002, etc.
+	newRPCPort := ":" + strconv.Itoa(startPort+1000+nodeIdx)      // defaults to 31001
+	newGRPCPort := ":" + strconv.Itoa(startPort+2000+nodeIdx)     // defaults to 32001
+	newGRPCPrivPort := ":" + strconv.Itoa(startPort+3000+nodeIdx) // defaults to 33001
+
+	// Replace port with multiplex ports mapping
+	re := regexp.MustCompile(`(.*)(\:\d+)(.*)`)
+	newP2PAddr := re.ReplaceAllString(nodeConfig.P2P.ListenAddress, `$1`+newP2PPort+`$3`)
+	newRPCAddr := re.ReplaceAllString(nodeConfig.RPC.ListenAddress, `$1`+newRPCPort+`$3`)
+	newGRPCAddr := re.ReplaceAllString(nodeConfig.GRPC.ListenAddress, `$1`+newGRPCPort+`$3`)
+	newGRPCPrivAddr := re.ReplaceAllString(nodeConfig.GRPC.Privileged.ListenAddress, `$1`+newGRPCPrivPort+`$3`)
+
+	// Deep-copy the config object to create multiple nodes
+	newNodeConfig := cmtcfg.NewConfigCopy(nodeConfig)
+	newNodeConfig.SetListenAddresses(
+		newP2PAddr,
+		newRPCAddr,
+		newGRPCAddr,
+		newGRPCPrivAddr,
+	)
+
+	// Overwrite wal file on a per-node basis
+	// i.e.: data/%address%/%fingerprint%/wal
+	dataDir := filepath.Join(nodeConfig.RootDir, cfg.DefaultDataDir)
+	walFile := filepath.Join(dataDir, address, scopeId, "wal")
+
+	// WAL relative path
+	walPath := filepath.Join(cfg.DefaultDataDir, address, scopeId, "wal")
+
+	// We overwrite the wal file to allow parallel I/O for multiple nodes
+	newNodeConfig.Consensus.SetWalFile(walFile)
+	newNodeConfig.Consensus.WalPath = walPath
+
+	return newNodeConfig
 }
 
 // ----------------------------------------------------------------------------

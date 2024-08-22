@@ -458,6 +458,7 @@ func NewMultiplexNode(ctx context.Context,
 		config:   config,
 		nodeInfo: nodeInfo,
 		nodeKey:  nodeKey,
+		Reactor:  reactor,
 
 		Nodes:  make(map[string]*ScopedNode, len(replicatedChainsScopeHashes)),
 		Scopes: replicatedChainsScopeHashes,

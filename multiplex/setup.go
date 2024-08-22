@@ -719,6 +719,9 @@ var (
 	genesisDocHashKey = []byte("mxGenesisDocHash")
 )
 
+// Provider takes a config and a logger and returns a ready to go [NodeRegistry].
+type Provider func(*cfg.Config, log.Logger) (*NodeRegistry, error)
+
 // DefaultMultiplexNode returns a CometBFT node with default settings for the
 // PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
 // It implements NodeProvider.
@@ -745,7 +748,6 @@ func DefaultMultiplexNode(config *cfg.Config, logger log.Logger) (*NodeRegistry,
 // or many state instances in the resulting state multiplex.
 func LoadMultiplexStateFromDBOrGenesisDocProviderWithConfig(
 	stateMultiplexDB MultiplexDB,
-	// genesisDocProvider node.GenesisDocProvider,
 	operatorGenesisHashHex string,
 	config *cfg.Config,
 	reactor *Reactor,

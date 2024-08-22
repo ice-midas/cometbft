@@ -66,8 +66,8 @@ func (c *ChecksummedGenesisDocSet) GetChecksum() []byte {
 type UserScopedGenesisDoc struct {
 	UserAddress crypto.Address   `json:"user_address"`
 	Scope       string           `json:"scope"`
+	ScopeHash   string           `json:"scope_hash"`
 	GenesisDoc  types.GenesisDoc `json:"genesis"`
-	ScopeHash   string
 }
 
 // GenesisDocSet defines the initial conditions for multiple CometBFT blockchains,

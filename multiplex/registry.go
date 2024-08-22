@@ -12,9 +12,9 @@ type NodeRegistry struct {
 	nodeInfo p2p.NodeInfo
 	nodeKey  *p2p.NodeKey // our node privkey
 
-	// TBI(midas): keep Nodes or split functionality
-	Nodes  MultiplexNode
-	Scopes []string
+	Nodes   MultiplexNode
+	Scopes  []string
+	Reactor *Reactor
 }
 
 // GetListenAddresses returns a service address map by user scope hash.
