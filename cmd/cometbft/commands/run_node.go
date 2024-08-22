@@ -13,8 +13,10 @@ import (
 )
 
 var (
-	cliParams nm.CliParams
-	keyType   string
+	cliParams       nm.CliParams
+	keyType         string
+	enableMultiplex bool
+	scopesFile      string
 )
 
 func genPrivKeyFromFlag() (crypto.PrivKey, error) {
