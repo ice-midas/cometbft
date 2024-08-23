@@ -144,9 +144,6 @@ func initMultiplexFilesWithConfig(config *cfg.Config) error {
 	}
 
 	if enableMultiplex {
-		// TODO(midas): remove debug logs
-		logger.Info("DEBUG: creating multiplex filesystem", "root", config.RootDir)
-
 		cfg.EnsureRootMultiplex(config.RootDir, &config.BaseConfig)
 	}
 

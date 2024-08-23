@@ -19,13 +19,13 @@ var (
 	stateKey = []byte("stateKey")
 )
 
-// ScopedStateStore embeds a DBStore and adds a scope hash
+// ScopedStateStore embeds a [sm.DBStore] pointer and adds a scope hash
 type ScopedStateStore struct {
 	ScopeHash string
 	*sm.DBStore
 }
 
-// ScopedBlockStore embeds a BlockStore and adds a scope hash
+// ScopedBlockStore embeds a [store.BlockStore] pointer and adds a scope hash
 type ScopedBlockStore struct {
 	ScopeHash string
 	*store.BlockStore

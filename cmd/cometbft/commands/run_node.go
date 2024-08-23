@@ -235,9 +235,6 @@ func loadScopesFromGenesisFile(genFile string) (map[string][]string, error) {
 
 	numReplicatedChains := len(genesisDocSet.GenesisDocs)
 
-	// TODO(midas): remove debug logs
-	logger.Info("DEBUG: found replicated chains", "count", numReplicatedChains)
-
 	// Read the replicated chains scoped genesis docs to find a list of scopes
 	// by user address. This map is later used to create a scope registry.
 	userScopes := make(map[string][]string, numReplicatedChains)

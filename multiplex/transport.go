@@ -9,6 +9,11 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 )
 
+// MultiplexTransportHandshake implements [p2p.TransportHandshakeFn] to permit using
+// node multiplexes to exchange [mxp2p.MultiNetworkNodeInfo] messages between peers
+// and execute a handshake between nodeInfo and the returned [p2p.NodeInfo] instance.
+//
+// Mimics the same behaviour as the default implementation in [p2p.MultiplexTransport].
 func MultiplexTransportHandshake(
 	c net.Conn,
 	timeout time.Duration,

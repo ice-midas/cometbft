@@ -46,13 +46,5 @@ When a set of node listeners is ready, the multiplex reactor sends a message on
 its channel `listenersStartedCh` which contains the user scope hash of the chain
 that is being replicated. After this happened, the node is able to start syncing
 state and blocks, as well as starting indexers, pruners, mempool, and others.
-
-# Open issues
-
-- Address books, switches and transports should be created from inside the [Reactor].
-- Must implement `nodeReadyCh` in reactor after inclusion of all idle services.
-- Fix the PEX reactor configuration which is currently global and therefor always on.
-- Fix the persistent peers configuration overwrite, can be done using [ScopedUserConfig].
-- Refactor `setup.go` such that the Reactor implements service creator helpers.
 */
 package multiplex

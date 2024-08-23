@@ -16,6 +16,7 @@ const (
 	mxWalDefaultFlushInterval = 10 * 2 * time.Second
 )
 
+// ScopedWAL embeds a [cs.BaseWAL] pointer and adds a scope hash
 type ScopedWAL struct {
 	ScopeHash string
 	*cs.BaseWAL

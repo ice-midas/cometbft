@@ -503,7 +503,7 @@ func (mt *MultiplexTransport) upgrade(
 		// if handshakeFn is set, proxy call to it
 		nodeInfo, err = mt.handshakeFn(secretConn, mt.handshakeTimeout, mt.nodeInfo)
 	} else {
-		// otherwise use default handshake implemenation
+		// otherwise use default handshake implementation
 		nodeInfo, err = handshake(secretConn, mt.handshakeTimeout, mt.nodeInfo)
 	}
 

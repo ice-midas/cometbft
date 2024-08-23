@@ -18,7 +18,7 @@ type StateServices struct {
 	BlockStore   *ScopedBlockStore
 }
 
-// ScopedState embeds a state instance and adds a scope hash
+// ScopedState embeds a [sm.State] instance and adds a scope hash
 type ScopedState struct {
 	ScopeHash string
 	sm.State

@@ -641,7 +641,6 @@ func createPEXReactorsAndAddToSwitches(
 	scopeRegistry := reactor.GetScopeRegistry()
 	userScopeHashes := scopeRegistry.GetScopeHashes()
 
-	// pexReactors := make(map[string]*pex.Reactor, len(userScopeHashes))
 	for _, userScopeHash := range userScopeHashes {
 		sw := serviceProvider(userScopeHash, "eventSwitch").(*ScopedSwitch)
 		addrBook := sw.GetAddrBook().(pex.AddrBook)
@@ -662,13 +661,9 @@ func createPEXReactorsAndAddToSwitches(
 			})
 		pexReactor.SetLogger(logger.With("module", "pex"))
 
-		// sw := switchMultiplex[userScopeHash]
 		sw.AddReactor("PEX", pexReactor)
-
-		// pexReactors[userScopeHash] = pexReactor
 	}
 
-	// return pexReactors, nil
 	return nil
 }
 

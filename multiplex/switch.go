@@ -5,7 +5,7 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 )
 
-// ScopedSwitch embeds a p2p.Switch and adds a scope hash
+// ScopedSwitch embeds a [p2p.Switch] pointer and adds a scope hash
 type ScopedSwitch struct {
 	ScopeHash string
 	*p2p.Switch
@@ -14,7 +14,7 @@ type ScopedSwitch struct {
 // ----------------------------------------------------------------------------
 // Builders
 
-// NewScopedStateStore creates a new Switch with the given config and scope hash.
+// NewScopedSwitch creates a new [p2p.Switch] with the given config and scope hash.
 func NewScopedSwitch(
 	cfg *config.P2PConfig,
 	transport p2p.Transport,

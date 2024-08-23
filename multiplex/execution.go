@@ -12,6 +12,7 @@ import (
 
 // NewMultiplexBlockExecutor returns a new BlockExecutor with a NopEventBus
 // using ScopedStateStore and ScopedBlockStore instances.
+//
 // Call SetEventBus to provide an event bus.
 func NewMultiplexBlockExecutor(
 	stateStore *ScopedStateStore,

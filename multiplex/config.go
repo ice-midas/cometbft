@@ -11,9 +11,9 @@ import (
 	cmtcfg "github.com/cometbft/cometbft/config"
 )
 
-// ScopedUserConfig embeds UserConfig and computes SHA256 hashes
-// by pairing user addresses and individual scopes such that every
-// combination of user address and scope can be referred to by hash
+// ScopedUserConfig embeds a [UserConfig] instance and computes SHA256
+// hashes by pairing user addresses and individual scopes such that every
+// combination of user address and scope can be referred to by a scope hash.
 type ScopedUserConfig struct {
 	cfg.UserConfig
 

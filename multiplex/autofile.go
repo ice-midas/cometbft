@@ -9,7 +9,7 @@ import (
 	"github.com/cometbft/cometbft/libs/service"
 )
 
-// ScopedGroup embeds a group instance and adds a scope hash
+// ScopedGroup embeds a [auto.Group] pointer and adds a scope hash
 type ScopedGroup struct {
 	ScopeHash string
 	*auto.Group

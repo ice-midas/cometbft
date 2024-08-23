@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
@@ -118,10 +117,8 @@ func NewMultiplexNode(ctx context.Context,
 		MultiplexMetricsProvider(config.Instrumentation),
 	)
 
-	// TODO: remove DEBUG logs
-	scopeHashes := reactor.GetUserConfig().GetScopeHashes()
-	fmt.Printf("DEBUG: starting multiplex node [%s]\n", string(nodeKey.ID()))
-	fmt.Printf("DEBUG: got %d scope hashes: %v\n", len(scopeHashes), strings.Join(scopeHashes, ", "))
+	// Warn the user about experimental status
+	logger.Info("WARNING - EXPERIMENTAL: Starting a node multiplex", "nodeId", string(nodeKey.ID()))
 
 	// ------------------------------------------------------------------------
 	// Starts the MultiplexReactor
@@ -130,12 +127,8 @@ func NewMultiplexNode(ctx context.Context,
 	// then the databases and stores.
 	// This process creates concurrent goroutines to configure nodes.
 	if err := reactor.Start(); err != nil {
-		fmt.Printf("DEBUG: could not start MultiplexReactor: %v\n", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("could not start the multiplex reactor: %w", err)
 	}
-
-	// TODO: remove DEBUG logs
-	fmt.Printf("DEBUG: multiplex reactor started [%s]\n", string(nodeKey.ID()))
 
 	// Read augmented user configuration (multiplex)
 	mxUserConfig := reactor.GetUserConfig()
@@ -149,17 +142,27 @@ func NewMultiplexNode(ctx context.Context,
 	multiplexMetricsProvider := MultiplexMetricsProvider(config.Instrumentation)
 	dbMultiplexProvider := reactor.GetDBMultiplexProvider()
 
+	// Select a limited number of listeners message updates from
+	// the multiplex reactor channel. This loop limits duplicate
+	// node initializations.
+	//
+	// TODO(midas): TBI whether loop can be removed to use `for select`.
 	for i := 0; i < numReplicatedChains; i++ {
 		// The multiplex reactor communicates scope hashes on a channel
 		// to tell this bootstrapper about the readiness of a node config
 		select {
 		case userScopeHash := <-reactor.listenersStartedCh:
 			scopeId := NewScopeIDFromHash(userScopeHash).Fingerprint()
+			logger.With("scope", scopeId)
+
+			// Retrieve replicated node config (concurrency-safe)
 			nodeConfig := reactor.replConfig[userScopeHash]
 
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: started node listeners [%s]\n", userScopeHash)
-			fmt.Printf("DEBUG: [%s] listen address: %s\n", scopeId, nodeConfig.RPC.ListenAddress)
+			// Warn the user about experimental status
+			logger.Info(
+				"Started node listeners",
+				"laddr", nodeConfig.P2P.ListenAddress,
+			)
 
 			// ------------------------------------------------------------------------
 			// ENVIRONMENT
@@ -181,9 +184,6 @@ func NewMultiplexNode(ctx context.Context,
 			}
 
 			stateMachine := stateServices.StateMachine
-
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: [%s] last block height: %d\n", scopeId, int(stateMachine.LastBlockHeight))
 
 			// The genesis doc key will be deleted if it existed.
 			// Not checking whether the key is there in case the genesis file was larger than
@@ -246,18 +246,18 @@ func NewMultiplexNode(ctx context.Context,
 				if err != nil {
 					return nil, sm.ErrCannotLoadState{Err: err}
 				}
-
-				// TODO: remove DEBUG logs
-				fmt.Printf("DEBUG: [%s] reloaded state height: %d\n", scopeId, int(stateMachine.LastBlockHeight))
 			}
+
+			// Inform about the state machine block height
+			logger.Info(
+				"Starte machine loaded",
+				"height", stateMachine.LastBlockHeight,
+			)
 
 			// Determine whether we should do block sync. This must happen after the handshake, since the
 			// app may modify the validator set, specifying ourself as the only validator.
 			blockSync := !onlyValidatorIsUs(*stateMachine, privValPubKey)
 			waitSync := stateSync || blockSync
-
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: [%s] waitSync: %v\n", scopeId, waitSync)
 
 			logNodeStartupInfo(*stateMachine, privValPubKey, logger, consensusLogger)
 
@@ -296,9 +296,6 @@ func NewMultiplexNode(ctx context.Context,
 				return nil, fmt.Errorf("failed to create pruner: %w", err)
 			}
 
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: [%s] starting block executor\n", scopeId)
-
 			// make block executor for consensus and blocksync reactors to execute blocks
 			blockExec := NewMultiplexBlockExecutor(
 				stateServices.StateStore,
@@ -318,9 +315,6 @@ func NewMultiplexNode(ctx context.Context,
 					panic(fmt.Sprintf("failed to retrieve statesynced height from store %s with scope hash %s; expected state store height to be %v", err, userScopeHash, stateMachine.LastBlockHeight))
 				}
 			}
-
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: [%s] offline statesync block height: %d\n", scopeId, int(offlineStateSyncHeight))
 
 			// Don't start block sync if we're doing a state sync first.
 			bcReactor, err := createBlocksyncReactor(
@@ -370,8 +364,8 @@ func NewMultiplexNode(ctx context.Context,
 			)
 			stateSyncReactor.SetLogger(logger.With("module", "statesync"))
 
-			// TODO: remove DEBUG logs
-			fmt.Printf("DEBUG: [%s] done configuring replicated chain node\n", scopeId)
+			// Inform about the state machine block height
+			logger.Info("Consensus ready for replicated chain")
 
 			// ------------------------------------------------------------------------
 			// MULTIPLEX SERVICES READY
@@ -388,6 +382,8 @@ func NewMultiplexNode(ctx context.Context,
 		// End of select
 	}
 	// End of for loop, following code is run *globally*
+
+	logger = logger.With("scope", "global")
 
 	// Global metrics are necessary to initialize stores and p2pMetrics is
 	// registered globally because P2P implementation is not replicated.

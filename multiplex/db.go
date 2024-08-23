@@ -10,13 +10,13 @@ import (
 	cfg "github.com/cometbft/cometbft/config"
 )
 
-// ScopedDBContext embeds a cfg.DBContext and adds a scope hash
+// ScopedDBContext embeds a [cfg.DBContext] instance and adds a scope hash
 type ScopedDBContext struct {
 	ScopeHash string
 	cfg.DBContext
 }
 
-// ScopedDB embeds a dbm.DB and adds a scope hash
+// ScopedDB embeds a [dbm.DB] instance and adds a scope hash
 type ScopedDB struct {
 	ScopeHash string
 	dbm.DB
