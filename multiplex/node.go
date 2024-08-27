@@ -475,7 +475,7 @@ func NewMultiplexNode(ctx context.Context,
 		node := node.NewNodeWithServices(
 			replChainNodeConfig,
 			replChainGenesisDoc,
-			nodeInfo,
+			nodeInfo.GetReplNodeInfo(replChainGenesisDoc.ChainID, userScopeHash),
 			nodeKey,
 
 			reactor.GetReplPrivValidator(userScopeHash),

@@ -9,9 +9,14 @@ import (
 
 	mxp2p "github.com/cometbft/cometbft/api/cometbft/multiplex/v1"
 	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
+	bc "github.com/cometbft/cometbft/internal/blocksync"
+	cs "github.com/cometbft/cometbft/internal/consensus"
+	"github.com/cometbft/cometbft/internal/evidence"
 	cmtstrings "github.com/cometbft/cometbft/internal/strings"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
+	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/statesync"
 )
 
 // ScopedProtocolVersion contains a scope hash and protocol versions for the software.
@@ -70,6 +75,57 @@ func (info MultiNetworkNodeInfo) ID() p2p.ID {
 // GetChannels returns the node's channels.
 func (info MultiNetworkNodeInfo) GetChannels() cmtbytes.HexBytes {
 	return info.Channels
+}
+
+// GetReplNodeInfo returns a [p2p.NodeInfo] instance by chain ID and scope hash.
+func (info MultiNetworkNodeInfo) GetReplNodeInfo(chainID string, scopeHash string) p2p.NodeInfo {
+	versionPos := slices.IndexFunc(info.ProtocolVersions, func(v ScopedProtocolVersion) bool {
+		return v.ScopeHash == scopeHash
+	})
+
+	networkPos := slices.IndexFunc(info.Networks, func(n ScopedChainInfo) bool {
+		return n.ScopeHash == scopeHash
+	})
+
+	laddrPos := slices.IndexFunc(info.ListenAddrs, func(a ScopedListenAddr) bool {
+		return a.ScopeHash == scopeHash
+	})
+
+	// Not being able to find a protocol version or network should never happen
+	if versionPos < 0 || networkPos < 0 || laddrPos < 0 {
+		panic(fmt.Sprintf("could not determine protocol version and network with scope hash %s ; Got %d versionPos and %d networkPos", scopeHash, versionPos, networkPos))
+	}
+
+	protocolVersion := info.ProtocolVersions[versionPos]
+	laddr := info.ListenAddrs[laddrPos]
+
+	nodeInfo := p2p.DefaultNodeInfo{
+		ProtocolVersion: p2p.NewProtocolVersion(
+			protocolVersion.P2P,
+			protocolVersion.Block,
+			protocolVersion.App,
+		),
+		DefaultNodeID: info.DefaultNodeID,
+		Network:       chainID,
+		Version:       info.Version,
+		Channels: []byte{
+			bc.BlocksyncChannel,
+			cs.StateChannel, cs.DataChannel, cs.VoteChannel, cs.VoteSetBitsChannel,
+			mempl.MempoolChannel,
+			evidence.EvidenceChannel,
+			statesync.SnapshotChannel, statesync.ChunkChannel,
+		},
+		Moniker: info.Moniker,
+		Other:   info.Other,
+	}
+
+	nodeInfo.ListenAddr = laddr.ListenAddr
+	err := nodeInfo.Validate()
+	if err != nil {
+		panic(fmt.Errorf("could not validate p2p node info: %w", err))
+	}
+
+	return nodeInfo
 }
 
 // Validate checks the self-reported MultiNetworkNodeInfo is safe.
