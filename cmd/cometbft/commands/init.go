@@ -111,16 +111,30 @@ func initFilesWithConfig(config *cfg.Config) error {
 }
 
 func initMultiplexFilesWithConfig(config *cfg.Config) error {
-	if len(scopesFile) == 0 {
-		return errors.New("missing mandatory scopes file parameter (--scopes-file)")
+	var err error
+	genesisDoc := config.GenesisFile()
+	if len(scopesFile) == 0 && !cmtos.FileExists(genesisDoc) {
+		return errors.New("missing one of genesis.json or scopes file parameter (--scopes-file)")
 	}
 
-	// Read the scopes.json file if any available, it should contain
-	// a map of slices with arbitrary scopes (plaintext) by user address.
-	// e.g.: { "CC8E6555A3F401FF61DA098F94D325E7041BC43A": ["Default", "Another"] }
-	userScopes, err := loadScopesFromFile(scopesFile)
-	if err != nil {
-		return err
+	// Generate or re-create the list of user scopes
+	userScopes := map[string][]string{}
+	if cmtos.FileExists(genesisDoc) {
+		// Read the genesis.json file to re-create the map of slices with
+		// arbitrary scopes by user address.
+		userScopes, err = loadScopesFromGenesisFile(config.GenesisFile())
+		if err != nil {
+			return fmt.Errorf("failed to load multiplex config: %w", err)
+		}
+	} else {
+		// Otherwise, read the scopes.json file, it should contain a map of slices
+		// with arbitrary scopes (plaintext) by user address.
+		// e.g.: { "CC8E6555A3F401FF61DA098F94D325E7041BC43A": ["Default", "Another"] }
+
+		userScopes, err = loadScopesFromFile(scopesFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	// If we can't find a user scopes configuration file or if it is invalid,
@@ -309,6 +323,36 @@ func loadScopesFromFile(file string) (map[string][]string, error) {
 	err = json.Unmarshal(scopesBytes, &userScopes)
 	if err != nil {
 		return map[string][]string{}, err
+	}
+
+	return userScopes, nil
+}
+
+func loadScopesFromGenesisFile(genFile string) (map[string][]string, error) {
+	if !cmtos.FileExists(genFile) {
+		return map[string][]string{}, fmt.Errorf("genesis file does not exist: %s", genFile)
+	}
+
+	// CAUTION:
+	// Genesis file is expected to contain a set of genesis docs
+	genesisDocSet, err := mx.GenesisDocSetFromFile(genFile)
+	if err != nil {
+		return map[string][]string{}, fmt.Errorf("error unmarshalling GenesisDocSet: %s", err.Error())
+	}
+
+	numReplicatedChains := len(genesisDocSet.GenesisDocs)
+
+	// Read the replicated chains scoped genesis docs to find a list of scopes
+	// by user address. This map is later used to create a scope registry.
+	userScopes := make(map[string][]string, numReplicatedChains)
+	for _, userGenDoc := range genesisDocSet.GenesisDocs {
+		userAddress := userGenDoc.UserAddress.String()
+
+		if _, ok := userScopes[userAddress]; !ok {
+			userScopes[userAddress] = []string{}
+		}
+
+		userScopes[userAddress] = append(userScopes[userAddress], userGenDoc.Scope)
 	}
 
 	return userScopes, nil

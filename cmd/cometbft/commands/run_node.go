@@ -220,33 +220,3 @@ func NewRunMultiplexCmd(multiplexProvider mx.Provider) *cobra.Command {
 	AddNodeFlags(cmd)
 	return cmd
 }
-
-func loadScopesFromGenesisFile(genFile string) (map[string][]string, error) {
-	if !cmtos.FileExists(genFile) {
-		return map[string][]string{}, fmt.Errorf("genesis file does not exist: %s", genFile)
-	}
-
-	// CAUTION:
-	// Genesis file is expected to contain a set of genesis docs
-	genesisDocSet, err := mx.GenesisDocSetFromFile(genFile)
-	if err != nil {
-		return map[string][]string{}, fmt.Errorf("error unmarshalling GenesisDocSet: %s", err.Error())
-	}
-
-	numReplicatedChains := len(genesisDocSet.GenesisDocs)
-
-	// Read the replicated chains scoped genesis docs to find a list of scopes
-	// by user address. This map is later used to create a scope registry.
-	userScopes := make(map[string][]string, numReplicatedChains)
-	for _, userGenDoc := range genesisDocSet.GenesisDocs {
-		userAddress := userGenDoc.UserAddress.String()
-
-		if _, ok := userScopes[userAddress]; !ok {
-			userScopes[userAddress] = []string{}
-		}
-
-		userScopes[userAddress] = append(userScopes[userAddress], userGenDoc.Scope)
-	}
-
-	return userScopes, nil
-}
