@@ -12,6 +12,9 @@ type ScopedDBProvider func(string, string) *ScopedDB
 // DBMultiplexProvider should provide a [MultiplexDB] by table name.
 type DBMultiplexProvider func(string) MultiplexDB
 
+// ScopedSeedNodesProvider should provide a comma-separated string containing p2p addresses.
+type ScopedSeedNodesProvider func(string) string
+
 // ScopedGenesisProvider should provide a [GenesisDoc] by scope hash.
 type ScopedGenesisProvider func(string) (*types.GenesisDoc, error)
 

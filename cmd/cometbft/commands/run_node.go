@@ -20,6 +20,7 @@ var (
 	keyType         string
 	enableMultiplex bool
 	scopesFile      string
+	seedsFile       string
 )
 
 func genPrivKeyFromFlag() (crypto.PrivKey, error) {

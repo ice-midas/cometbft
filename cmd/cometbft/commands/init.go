@@ -33,7 +33,8 @@ var InitFilesCmd = &cobra.Command{
 func init() {
 	InitFilesCmd.Flags().StringVarP(&keyType, "key-type", "k", ed25519.KeyType, fmt.Sprintf("private key type (one of %s)", kt.SupportedKeyTypesStr()))
 	InitFilesCmd.Flags().BoolVarP(&enableMultiplex, "multiplex", "m", false, fmt.Sprintf("whether to use plural replication mode"))
-	InitFilesCmd.Flags().StringVarP(&scopesFile, "scopes-file", "s", "", "path to a JSON file containing the initial user scopes that will be replicated.")
+	InitFilesCmd.Flags().StringVarP(&scopesFile, "scopes-file", "", "", "path to a JSON file containing the initial user scopes that will be replicated.")
+	InitFilesCmd.Flags().StringVarP(&seedsFile, "seeds-file", "", "", "path to a JSON file containing the replicate chains scope hashes and associated seeds.")
 }
 
 func initFiles(*cobra.Command, []string) error {
@@ -113,12 +114,15 @@ func initFilesWithConfig(config *cfg.Config) error {
 func initMultiplexFilesWithConfig(config *cfg.Config) error {
 	var err error
 	genesisDoc := config.GenesisFile()
-	if len(scopesFile) == 0 && !cmtos.FileExists(genesisDoc) {
-		return errors.New("missing one of genesis.json or scopes file parameter (--scopes-file)")
+	if !cmtos.FileExists(genesisDoc) && len(scopesFile) == 0 {
+		return errors.New("without a genesis.json the scopes file must be present (--scopes-file)")
+	} else if cmtos.FileExists(genesisDoc) && len(seedsFile) == 0 {
+		return errors.New("provided a genesis.json the seeds file must be present (--seeds-file)")
 	}
 
 	// Generate or re-create the list of user scopes
 	userScopes := map[string][]string{}
+	userSeeds := map[string]string{}
 	if cmtos.FileExists(genesisDoc) {
 		// Read the genesis.json file to re-create the map of slices with
 		// arbitrary scopes by user address.
@@ -126,14 +130,21 @@ func initMultiplexFilesWithConfig(config *cfg.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to load multiplex config: %w", err)
 		}
+
+		userSeeds, err = loadSeedsFromFile(seedsFile)
+		if err != nil {
+			return fmt.Errorf("failed to load seeds config: %w", err)
+		}
+
+		// TODO(midas): remove debug logs
+		logger.Info("[DEBUG] found seeds file", "cnt", len(userSeeds))
 	} else {
 		// Otherwise, read the scopes.json file, it should contain a map of slices
 		// with arbitrary scopes (plaintext) by user address.
 		// e.g.: { "CC8E6555A3F401FF61DA098F94D325E7041BC43A": ["Default", "Another"] }
-
 		userScopes, err = loadScopesFromFile(scopesFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load scopes config: %w", err)
 		}
 	}
 
@@ -167,10 +178,11 @@ func initMultiplexFilesWithConfig(config *cfg.Config) error {
 	if cmtos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
 	} else {
-		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+		nodeKey, err := p2p.LoadOrGenNodeKey(nodeKeyFile)
+		if err != nil {
 			return err
 		}
-		logger.Info("Generated node key", "path", nodeKeyFile)
+		logger.Info("Generated node key", "path", nodeKeyFile, "id", string(nodeKey.ID()))
 	}
 
 	// Create as many private validators as there are user scopes (one per chain)
@@ -182,6 +194,16 @@ func initMultiplexFilesWithConfig(config *cfg.Config) error {
 
 		mxRootDir := config.RootDir
 		mxDataDir := filepath.Join(cfg.DefaultDataDir, scParts[0], scopeId.Fingerprint())
+
+		// Try to find seeds for this network (parsed from seeds.json)
+		// If none are set, we are setting up a new network.
+		chainSeeds, ok := userSeeds[scopeId.Fingerprint()]
+		if !ok {
+			chainSeeds = ""
+		}
+
+		// TODO(midas): remove debug logs
+		logger.Info("[DEBUG] using chain seed", "scope", scopeId.Fingerprint(), "node", chainSeeds)
 
 		privValKeyFile := filepath.Join(mxDataDir, "priv_validator_key.json")
 		privValStateFile := filepath.Join(mxDataDir, "priv_validator_state.json")
@@ -206,6 +228,7 @@ func initMultiplexFilesWithConfig(config *cfg.Config) error {
 			scopedUserConf,
 			scopeRegistry,
 			scopeId.Hash(),
+			chainSeeds,
 		)
 
 		// Store node config in config.toml
@@ -356,4 +379,24 @@ func loadScopesFromGenesisFile(genFile string) (map[string][]string, error) {
 	}
 
 	return userScopes, nil
+}
+
+func loadSeedsFromFile(file string) (map[string]string, error) {
+	if len(file) == 0 || !cmtos.FileExists(file) {
+		return map[string]string{}, fmt.Errorf("could not find seeds file: %s", file)
+	}
+
+	logger.Info("Using seeds file", "path", file)
+	seedsBytes, err := os.ReadFile(file)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	userSeeds := map[string]string{}
+	err = json.Unmarshal(seedsBytes, &userSeeds)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	return userSeeds, nil
 }

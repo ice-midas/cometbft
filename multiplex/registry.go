@@ -1,7 +1,12 @@
 package multiplex
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+
 	cfg "github.com/cometbft/cometbft/config"
+	cmtos "github.com/cometbft/cometbft/internal/os"
 	"github.com/cometbft/cometbft/p2p"
 )
 
@@ -31,4 +36,27 @@ func (r *NodeRegistry) GetListenAddresses() MultiplexServiceAddress {
 	}
 
 	return laddrs
+}
+
+// MultiplexSeedNodesProvider returns a seed node provider which parses
+// a replicated chain node configuration and returns the P2P.Seeds value.
+func MultiplexSeedNodesProvider(config *cfg.Config) ScopedSeedNodesProvider {
+	return func(userScopeHash string) string {
+		confDir := filepath.Join(config.RootDir, cfg.DefaultConfigDir)
+		scopeId := userScopeHash[:16] // 8 first bytes
+
+		var replConfigFile string
+		err := filepath.Walk(confDir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info.Name() == scopeId {
+				replConfigFile = filepath.Join(path, "config.toml")
+			}
+			return nil
+		})
+		if err != nil || len(replConfigFile) == 0 || !cmtos.FileExists(replConfigFile) {
+			panic(fmt.Errorf("could not find configuration file for scope: %s", userScopeHash))
+		}
+
+		replConf := cfg.ReadConfigFile(replConfigFile)
+		return replConf.P2P.Seeds
+	}
 }

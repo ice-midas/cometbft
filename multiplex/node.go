@@ -115,6 +115,7 @@ func NewMultiplexNode(ctx context.Context,
 		genesisDocProvider,
 		GlobalMetricsProvider(config.Instrumentation),
 		MultiplexMetricsProvider(config.Instrumentation),
+		MultiplexSeedNodesProvider(config),
 	)
 
 	// Warn the user about experimental status
@@ -250,7 +251,7 @@ func NewMultiplexNode(ctx context.Context,
 
 			// Inform about the state machine block height
 			logger.Info(
-				"Starte machine loaded",
+				"State machine loaded",
 				"height", stateMachine.LastBlockHeight,
 			)
 
@@ -529,9 +530,8 @@ func makeNodeInfo(
 	nodeKey *p2p.NodeKey,
 	multiplexReactor *Reactor,
 ) (MultiNetworkNodeInfo, error) {
-	replicatedChains := multiplexReactor.GetUserConfig().GetScopeHashes()
+	replicatedChains := multiplexReactor.GetScopeRegistry().GetScopeHashes()
 	numReplicatedChains := len(replicatedChains)
-	replScopeHashes := make([]string, numReplicatedChains)
 	protocolVersions := make([]ScopedProtocolVersion, numReplicatedChains)
 	supportedNetworks := make([]ScopedChainInfo, numReplicatedChains)
 	listenAddrs := make([]ScopedListenAddr, numReplicatedChains)
@@ -581,7 +581,7 @@ func makeNodeInfo(
 
 	nodeInfo := MultiNetworkNodeInfo{
 		DefaultNodeID:    nodeKey.ID(),
-		Scopes:           replScopeHashes,
+		Scopes:           replicatedChains,
 		ProtocolVersions: protocolVersions,
 		Networks:         supportedNetworks,
 		ListenAddrs:      listenAddrs,

@@ -9,6 +9,8 @@ import (
 
 	_ "embed"
 
+	toml "github.com/pelletier/go-toml/v2"
+
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 )
@@ -130,6 +132,16 @@ func WriteConfigFile(configFilePath string, config *Config) {
 	}
 
 	cmtos.MustWriteFile(configFilePath, buffer.Bytes(), 0o644)
+}
+
+// ReadConfigFile unmarshals a toml configuration file using pelletier/go-toml.
+func ReadConfigFile(configFilePath string) *Config {
+	var conf Config
+	confBytes := cmtos.MustReadFile(configFilePath)
+
+	// TODO(midas): should not dismiss unmarshaling errors (e.g. time.Duration)
+	toml.Unmarshal(confBytes, &conf)
+	return &conf
 }
 
 // Note: any changes to the comments/variables/mapstructure

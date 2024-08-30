@@ -82,6 +82,7 @@ type Reactor struct {
 	// Network metadata for multiplex
 	icsGenesisProvider node.IChecksummedGenesisDoc
 	genesisDocProvider ScopedGenesisProvider
+	seedNodesProvider  ScopedSeedNodesProvider
 	networksSyncStates map[string]bool
 	networksSyncBlocks map[string]bool
 
@@ -98,6 +99,7 @@ func NewReactor(
 	genesisDocProvider node.GenesisDocProvider,
 	shareMetricsProvider SharedMetricsProvider,
 	chainMetricsProvider ReplicatedMetricsProvider,
+	seedNodesProvider ScopedSeedNodesProvider,
 ) *Reactor {
 	// Uses a singleton scope registry to create SHA256 once
 	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
@@ -128,6 +130,9 @@ func NewReactor(
 		scopeRegistry:        scopeRegistry,
 		shareMetricsProvider: shareMetricsProvider,
 		chainMetricsProvider: chainMetricsProvider,
+
+		// network
+		seedNodesProvider: seedNodesProvider,
 	}
 	r.BaseReactor = *p2p.NewBaseReactor("Multiplex", r)
 
@@ -410,6 +415,7 @@ func (r *Reactor) OnStart() error {
 			r.userConfig,
 			r.scopeRegistry,
 			userScopeHash,
+			r.seedNodesProvider(userScopeHash),
 		)
 		nodeConfig := r.replConfig[userScopeHash]
 		r.confMutex.Unlock()

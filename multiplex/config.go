@@ -8,7 +8,6 @@ import (
 	"time"
 
 	cfg "github.com/cometbft/cometbft/config"
-	cmtcfg "github.com/cometbft/cometbft/config"
 )
 
 // ScopedUserConfig embeds a [UserConfig] instance and computes SHA256
@@ -137,7 +136,8 @@ func NewMultiplexNodeConfig(
 	userConfig *ScopedUserConfig,
 	scopeRegistry *ScopeRegistry,
 	scopeHash string,
-) *cmtcfg.Config {
+	seedNodes string,
+) *cfg.Config {
 	// Multiplex can be configured to start at different port
 	startPort := userConfig.GetListenPort() // defaults to 30001
 
@@ -159,13 +159,18 @@ func NewMultiplexNodeConfig(
 	newGRPCPrivAddr := re.ReplaceAllString(nodeConfig.GRPC.Privileged.ListenAddress, `$1`+newGRPCPrivPort+`$3`)
 
 	// Deep-copy the config object to create multiple nodes
-	newNodeConfig := cmtcfg.NewConfigCopy(nodeConfig)
+	newNodeConfig := cfg.NewConfigCopy(nodeConfig)
 	newNodeConfig.SetListenAddresses(
 		newP2PAddr,
 		newRPCAddr,
 		newGRPCAddr,
 		newGRPCPrivAddr,
 	)
+
+	// Overwrite seeds if any available
+	if len(seedNodes) > 0 {
+		newNodeConfig.P2P.Seeds = seedNodes
+	}
 
 	// Overwrite wal file on a per-node basis
 	// i.e.: data/%address%/%fingerprint%/wal
