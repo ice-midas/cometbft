@@ -1032,7 +1032,7 @@ func assertConfigureMultiplexNodeRegistry(
 	require.NotEmpty(t, r.Nodes, "the registry should not be empty")
 	require.NotContains(t, r.Nodes, "") // empty key should not exist in plural mode
 
-	return config, r, &scopeRegistry
+	return config, r, scopeRegistry
 }
 
 // When using this function, do not forget to call Stop()

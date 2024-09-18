@@ -102,7 +102,7 @@ func TestBigMultiplexValidatorSetStartStopProduceBlocksOneChainEightValidators(t
 
 	for _, n := range validatorNodes {
 		// Calls wg.Done() after executing node.Start()
-		assertStartValidatorNodeParallel(t, n.Config(), n, &wg, &scopeRegistry)
+		assertStartValidatorNodeParallel(t, n.Config(), n, &wg, scopeRegistry)
 	}
 
 	// Wait for both nodes to be up and running
