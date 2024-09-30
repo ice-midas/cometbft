@@ -122,7 +122,7 @@ func TestMultiplexValidatorSetManyChainsHaveCorrectValidators(t *testing.T) {
 
 	validatorsPubs, _ := createTestValidatorSet(t, testName, numValidators, userScopes)
 	require.NotEmpty(t, validatorsPubs, "should create a valid validator set")
-	require.Contains(t, validatorsPubs, mxtest.TestScopeHash)
+	require.Contains(t, validatorsPubs, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
 
 	_, r, _ := assertConfigureMultiplexNodeRegistry(t,
 		testName,
@@ -167,8 +167,8 @@ func TestMultiplexValidatorSetStartStopSingleValidatorChain(t *testing.T) {
 
 	validatorsPubs, privValidators := createTestValidatorSet(t, testName, numValidators, userScopes)
 	require.NotEmpty(t, validatorsPubs, "should create a valid validator set")
-	require.Contains(t, validatorsPubs, mxtest.TestScopeHash)
-	require.Contains(t, privValidators, mxtest.TestScopeHash)
+	require.Contains(t, validatorsPubs, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
+	require.Contains(t, privValidators, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
 	require.Equal(t, len(privValidators[mxtest.TestScopeHash]), numValidators)
 
 	privValidator_n1 := privValidators[mxtest.TestScopeHash][0]
@@ -204,8 +204,8 @@ func TestMultiplexValidatorSetStartStopTwoNodesWithPrivValidator(t *testing.T) {
 
 	validatorsPubs, privValidators := createTestValidatorSet(t, testName, numValidators, userScopes)
 	require.NotEmpty(t, validatorsPubs, "should create a valid validator set")
-	require.Contains(t, validatorsPubs, mxtest.TestScopeHash)
-	require.Contains(t, privValidators, mxtest.TestScopeHash)
+	require.Contains(t, validatorsPubs, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
+	require.Contains(t, privValidators, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
 	require.Equal(t, len(privValidators[mxtest.TestScopeHash]), numValidators)
 
 	privValidator_n1 := privValidators[mxtest.TestScopeHash][0]
@@ -282,8 +282,8 @@ func TestBigMultiplexValidatorSetStartStopTwoNodesBothProduceBlocks(t *testing.T
 
 	validatorsPubs, privValidators := createTestValidatorSet(t, testName, numValidators, userScopes)
 	require.NotEmpty(t, validatorsPubs, "should create a valid validator set")
-	require.Contains(t, validatorsPubs, mxtest.TestScopeHash)
-	require.Contains(t, privValidators, mxtest.TestScopeHash)
+	require.Contains(t, validatorsPubs, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
+	require.Contains(t, privValidators, mxtest.TestScopeHash, "should contain mxtest.TestScopeHash")
 	require.Equal(t, len(privValidators[mxtest.TestScopeHash]), numValidators)
 
 	privValidator_n1 := privValidators[mxtest.TestScopeHash][0]
