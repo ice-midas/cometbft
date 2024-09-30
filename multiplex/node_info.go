@@ -78,7 +78,7 @@ func (info MultiNetworkNodeInfo) GetChannels() cmtbytes.HexBytes {
 }
 
 // GetReplNodeInfo returns a [p2p.NodeInfo] instance by chain ID and scope hash.
-func (info MultiNetworkNodeInfo) GetReplNodeInfo(chainID string, scopeHash string) p2p.NodeInfo {
+func (info MultiNetworkNodeInfo) GetReplNodeInfo(chainID string, scopeHash string) p2p.DefaultNodeInfo {
 	versionPos := slices.IndexFunc(info.ProtocolVersions, func(v ScopedProtocolVersion) bool {
 		return v.ScopeHash == scopeHash
 	})

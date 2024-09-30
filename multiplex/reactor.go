@@ -99,7 +99,6 @@ func NewReactor(
 	genesisDocProvider node.GenesisDocProvider,
 	shareMetricsProvider SharedMetricsProvider,
 	chainMetricsProvider ReplicatedMetricsProvider,
-	seedNodesProvider ScopedSeedNodesProvider,
 ) *Reactor {
 	// Uses a singleton scope registry to create SHA256 once
 	scopeRegistry, err := DefaultScopeHashProvider(&config.UserConfig)
@@ -130,9 +129,6 @@ func NewReactor(
 		scopeRegistry:        scopeRegistry,
 		shareMetricsProvider: shareMetricsProvider,
 		chainMetricsProvider: chainMetricsProvider,
-
-		// network
-		seedNodesProvider: seedNodesProvider,
 	}
 	r.BaseReactor = *p2p.NewBaseReactor("Multiplex", r)
 
@@ -163,6 +159,9 @@ func NewReactor(
 
 		return r.serviceRegistry[scopeHash][serviceName]
 	}
+
+	// Make seeds accessible per replicated chain
+	r.seedNodesProvider = MultiplexSeedNodesProvider(config)
 
 	// From here on, node listeners can be started
 	r.listenersStartedCh = make(chan string)

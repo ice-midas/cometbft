@@ -1,7 +1,6 @@
 package multiplex
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -40,6 +39,7 @@ func (r *NodeRegistry) GetListenAddresses() MultiplexServiceAddress {
 
 // MultiplexSeedNodesProvider returns a seed node provider which parses
 // a replicated chain node configuration and returns the P2P.Seeds value.
+// It returns an empty string if the seeds can't be determined.
 func MultiplexSeedNodesProvider(config *cfg.Config) ScopedSeedNodesProvider {
 	return func(userScopeHash string) string {
 		confDir := filepath.Join(config.RootDir, cfg.DefaultConfigDir)
@@ -53,7 +53,7 @@ func MultiplexSeedNodesProvider(config *cfg.Config) ScopedSeedNodesProvider {
 			return nil
 		})
 		if err != nil || len(replConfigFile) == 0 || !cmtos.FileExists(replConfigFile) {
-			panic(fmt.Errorf("could not find configuration file for scope: %s", userScopeHash))
+			return ""
 		}
 
 		replConf := cfg.ReadConfigFile(replConfigFile)

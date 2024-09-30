@@ -115,7 +115,6 @@ func NewMultiplexNode(ctx context.Context,
 		genesisDocProvider,
 		GlobalMetricsProvider(config.Instrumentation),
 		MultiplexMetricsProvider(config.Instrumentation),
-		MultiplexSeedNodesProvider(config),
 	)
 
 	// Warn the user about experimental status
