@@ -161,6 +161,7 @@ type DBStore struct {
 	dbStore
 }
 
+// NewDBStore creates a [DBStore] instance using a [dbm.DB] and [StoreOptions].
 func NewDBStore(db dbm.DB, options StoreOptions) Store {
 	return &DBStore{
 		dbStore: NewStore(db, options).(dbStore),
@@ -199,6 +200,7 @@ type StoreOptions struct {
 var _ Store = (*dbStore)(nil)
 var _ Store = (*DBStore)(nil)
 
+// GetDatabase returns the [dbm.DB] database adapter.
 func (dbs *dbStore) GetDatabase() dbm.DB {
 	return dbs.db
 }

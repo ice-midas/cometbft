@@ -19,7 +19,11 @@ func (env *Environment) ABCIQuery(
 	height int64,
 	prove bool,
 ) (*ctypes.ResultABCIQuery, error) {
-	resQuery, err := env.ProxyAppQuery.Query(context.TODO(), &abci.QueryRequest{
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", env.GenDoc.ChainID)
+
+	resQuery, err := env.ProxyAppQuery.Query(ctx, &abci.QueryRequest{
 		Path:   path,
 		Data:   data,
 		Height: height,
@@ -35,7 +39,11 @@ func (env *Environment) ABCIQuery(
 // ABCIInfo gets some info about the application.
 // More: https://docs.cometbft.com/main/rpc/#/ABCI/abci_info
 func (env *Environment) ABCIInfo(_ *rpctypes.Context) (*ctypes.ResultABCIInfo, error) {
-	resInfo, err := env.ProxyAppQuery.Info(context.TODO(), proxy.InfoRequest)
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", env.GenDoc.ChainID)
+
+	resInfo, err := env.ProxyAppQuery.Info(ctx, proxy.InfoRequest)
 	if err != nil {
 		return nil, err
 	}
