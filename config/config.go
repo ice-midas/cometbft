@@ -1658,6 +1658,34 @@ func (cfg *DataCompanionPruningConfig) ValidateBasic() error {
 }
 
 // -----------------------------------------------------------------------------
+// SnapshotOptions
+
+// SnapshotOptions defines the snapshot strategy used when determining which
+// heights are snapshotted for state sync.
+//
+// It also contains a format field which differs depending on the type of
+// snapshot being taken/restored. See constants [types.CurrentNetworkFormat]
+// and [types.CurrentHistoryFormat] for possible values.
+type SnapshotOptions struct {
+	// Format defines the type of snapshot being taken.
+	Format uint32 `mapstructure:"format"`
+
+	// Interval defines at which heights the snapshot is taken.
+	Interval uint64 `mapstructure:"interval"`
+
+	// KeepRecent defines how many snapshots to keep in heights.
+	KeepRecent uint32 `mapstructure:"keep_recent"`
+}
+
+func NewSnapshotOptions(format uint32, interval uint64, keepRecent uint32) SnapshotOptions {
+	return SnapshotOptions{
+		Format:     format,
+		Interval:   interval,
+		KeepRecent: keepRecent,
+	}
+}
+
+// -----------------------------------------------------------------------------
 // ReplicationStrategy
 
 // ReplicationStrategy exports a string interface that determines the type of
@@ -1744,4 +1772,13 @@ type MultiplexConfig struct {
 	// multiplex. Other nodes in the multiplex *increment* this value by their
 	// respective *index* in a slice of ChainIDs sorted lexicographically.
 	RPCStartPort uint16 `mapstructure:"p2p_listen_port"`
+
+	// SnapshotOptions contains the configuration for state-sync snapshots
+	// including the currently tracked *format*, blocks *interval* and the
+	// *keep recent* option.
+	//
+	// This property maps snapshot options to a [ReplicationStrategy], thus
+	// permitting to have different configuration for the *historical data*
+	// snapshots and for the *network data* snapshots.
+	SnapshotOptions map[ReplicationStrategy]SnapshotOptions `mapstructure:"snapshot_options"`
 }
