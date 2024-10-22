@@ -270,6 +270,10 @@ type BaseConfig struct {
 	// If true, query the ABCI app on connecting to a new peer
 	// so the app can decide if we should keep the connection or not
 	FilterPeers bool `mapstructure:"filter_peers"` // false
+
+	// If set, run concurrent consensus instances and state machines
+	// Multiplex options use an anonymous struct
+	MultiplexConfig `mapstructure:",squash"`
 }
 
 // DefaultBaseConfig returns a default base configuration for a CometBFT node.
@@ -288,7 +292,46 @@ func DefaultBaseConfig() BaseConfig {
 		FilterPeers:        false,
 		DBBackend:          "pebbledb",
 		DBPath:             DefaultDataDir,
+		MultiplexConfig:    EmptyMultiplexConfig(), // by default, disable multiplex
 	}
+}
+
+// MultiplexBaseConfig returns a multiplex base configuration for a
+// CometBFT node for which the multiplex features are *enabled*.
+// The chainSeeds parameter must contain a mapping of comma-separated seed
+// nodes by ChainID as illustrated in [MultiplexConfig].
+// The userChains parameter must contain a mapping of ChainID by user addresses
+// as illustrated in [MultiplexConfig].
+//
+// CAUTION: Using this function will *enable* multiplex features.
+func MultiplexBaseConfig(
+	syncConfig map[string]*StateSyncConfig,
+	chainSeeds map[string]string,
+	userChains map[string][]string,
+	multiplexOptions ...func(*MultiplexConfig),
+) BaseConfig {
+	// Validate or return defaults
+	if len(chainSeeds) == 0 && len(userChains) == 0 {
+		return DefaultBaseConfig()
+	}
+
+	// Multiplex features will be enabled.
+	config := DefaultBaseConfig()
+	config.MultiplexConfig = MultiplexConfig{
+		Strategy:     NewReplicationStrategy("Network"),
+		SyncConfig:   syncConfig,
+		ChainSeeds:   chainSeeds,
+		UserChains:   userChains,
+		P2PStartPort: uint16(30001),
+		RPCStartPort: uint16(40001),
+	}
+
+	// permits overwriting default multiplex config, e.g. `mx.WithStrategy()`.
+	for _, option := range multiplexOptions {
+		option(&config.MultiplexConfig)
+	}
+
+	return config
 }
 
 // TestBaseConfig returns a base configuration for testing a CometBFT node.
@@ -297,6 +340,32 @@ func TestBaseConfig() BaseConfig {
 	cfg.ProxyApp = "kvstore"
 	cfg.DBBackend = "memdb"
 	return cfg
+}
+
+// MultiplexTestBaseConfig returns a base configuration for testing a multiplex
+// enabled CometBFT node.
+func MultiplexTestBaseConfig(
+	syncConfig map[string]*StateSyncConfig,
+	chainSeeds map[string]string,
+	userChains map[string][]string,
+) BaseConfig {
+	cfg := MultiplexBaseConfig(syncConfig, chainSeeds, userChains)
+	cfg.ProxyApp = "kvstore"
+	cfg.DBBackend = "memdb"
+	return cfg
+}
+
+// EmptyMultiplexConfig returns a disabled multiplex configuration for a CometBFT node.
+// Note: the multiplex features are *disabled* using this configuration object.
+func EmptyMultiplexConfig() MultiplexConfig {
+	return MultiplexConfig{
+		Strategy:     DefaultReplicationStrategy(),
+		SyncConfig:   map[string]*StateSyncConfig{},
+		ChainSeeds:   map[string]string{},   // empty seeds
+		UserChains:   map[string][]string{}, // empty chains
+		P2PStartPort: 30001,
+		RPCStartPort: 40001,
+	}
 }
 
 // GenesisFile returns the full path to the genesis.json file.
@@ -1586,4 +1655,93 @@ func (cfg *DataCompanionPruningConfig) ValidateBasic() error {
 		return errors.New("initial_block_results_retain_height cannot be negative")
 	}
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// ReplicationStrategy
+
+// ReplicationStrategy exports a string interface that determines the type of
+// replication being executed on this node. This strategy is notably used to
+// determine the type of node and if it should use multiplex features.
+type ReplicationStrategy interface {
+	fmt.Stringer
+}
+
+// replMode is unexported to allow only extensions by value.
+type replMode struct {
+	string
+}
+
+func (m replMode) String() string {
+	return m.string
+}
+
+// DefaultReplicationStrategy() returns the default replication strategy used.
+// Note that by default, the multiplex features are *disabled*.
+func DefaultReplicationStrategy() ReplicationStrategy {
+	return NewReplicationStrategy("Disable")
+}
+
+// NewReplicationStrategy creates a ReplicationStrategy by name.
+func NewReplicationStrategy(strategy string) replMode {
+	return replMode{string: strategy}
+}
+
+// -----------------------------------------------------------------------------
+// MultiplexConfig
+
+// MultiplexConfig defines the multiplex state replication configuration for a
+// CometBFT node connecting to one or many networks.
+type MultiplexConfig struct {
+	// Strategy contains a replication mode which determines the *type* of node
+	// that will be run with this multiplex instance.
+	//
+	// Note that when setting this value to "History", the node will *not*
+	// synchronize with replicated chains but instead it will download snapshots
+	// that contain historical data.
+	//
+	// Note that when setting this value to "Disable", the node will *not*
+	// run concurrent instances using the multiplex and it will instead run the
+	// legacy node implementation, without multiplex.
+	//
+	// More details about available values can be found in [ReplicationStrategy].
+	Strategy ReplicationStrategy `mapstructure:"replication"`
+
+	// SyncConfig contains *trust options* as required by state-sync, this
+	// includes a trusted app hash and trusted height which are mapped to
+	// a ChainID.
+	// If the trust period is left empty, it will use the default trust period
+	// of 168 hours (7 days).
+	//
+	// IMPORTANT: Both trusted values are required for state-sync.
+	SyncConfig map[string]*StateSyncConfig `mapstructure:"sync_config"`
+
+	// ChainSeeds contains comma-separeted seed nodes mapped to ChainIDs
+	// such that these seed nodes are used when connecting to a network,
+	// and permit to provide trusted values necessary to start state-sync.
+	//
+	// This configuration can be provided using a `seeds.json` file and/or
+	// the `--seeds-file` option as implemented with the `cometbft init`
+	// command. The list of seeds is required if you are trying to connect
+	// to *existing* replicated chains.
+	//
+	// IMPORTANT: A minimum of 2 RPC servers are required for state-sync.
+	ChainSeeds map[string]string `mapstructure:"chain_seeds"`
+
+	// UserChains contains ChainID arrays, e.g. {"mx-chain-%address%-%scope%"}
+	// mapped to user addresses such that state is replicated per-each chain
+	// and consensus instances run concurrently on the node.
+	UserChains map[string][]string `mapstructure:"user_chains"`
+
+	// P2PStartPort contains a network port number which defaults to 30001
+	// and which is used as the first node's P2P listen address port in the
+	// multiplex. Other nodes in the multiplex *increment* this value by their
+	// respective *index* in a slice of ChainIDs sorted lexicographically.
+	P2PStartPort uint16 `mapstructure:"p2p_listen_port"`
+
+	// RPCStartPort contains a network port number which defaults to 40001
+	// and which is used as the first node's RPC listen address port in the
+	// multiplex. Other nodes in the multiplex *increment* this value by their
+	// respective *index* in a slice of ChainIDs sorted lexicographically.
+	RPCStartPort uint16 `mapstructure:"p2p_listen_port"`
 }
