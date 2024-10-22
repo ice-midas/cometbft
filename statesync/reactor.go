@@ -32,6 +32,9 @@ const (
 type Reactor struct {
 	p2p.BaseReactor
 
+	// ChainID contains the statesync'd chain identifier (multiplex)
+	ChainID string
+
 	cfg       config.StateSyncConfig
 	conn      proxy.AppConnSnapshot
 	connQuery proxy.AppConnQuery
@@ -50,6 +53,7 @@ func NewReactor(
 	conn proxy.AppConnSnapshot,
 	connQuery proxy.AppConnQuery,
 	metrics *Metrics,
+	reactorOptions ...func(*Reactor),
 ) *Reactor {
 	r := &Reactor{
 		cfg:       cfg,
@@ -57,9 +61,22 @@ func NewReactor(
 		connQuery: connQuery,
 		metrics:   metrics,
 	}
+
+	// permits populating ChainID
+	for _, option := range reactorOptions {
+		option(r)
+	}
+
 	r.BaseReactor = *p2p.NewBaseReactor("StateSync", r)
 
 	return r
+}
+
+// ReactorWithChainID sets the ChainID of a statesync reactor.
+func ReactorWithChainID(chainId string) func(*Reactor) {
+	return func(r *Reactor) {
+		r.ChainID = chainId
+	}
 }
 
 // GetChannels implements p2p.Reactor.
@@ -173,7 +190,12 @@ func (r *Reactor) Receive(e p2p.Envelope) {
 		case *ssproto.ChunkRequest:
 			r.Logger.Debug("Received chunk request", "height", msg.Height, "format", msg.Format,
 				"chunk", msg.Index, "peer", e.Src.ID())
-			resp, err := r.conn.LoadSnapshotChunk(context.TODO(), &abci.LoadSnapshotChunkRequest{
+
+			// Inject the ChainID for access in ABCI
+			ctx := context.TODO()
+			ctx = context.WithValue(ctx, "ChainID", r.ChainID)
+
+			resp, err := r.conn.LoadSnapshotChunk(ctx, &abci.LoadSnapshotChunkRequest{
 				Height: msg.Height,
 				Format: msg.Format,
 				Chunk:  msg.Index,
@@ -229,7 +251,11 @@ func (r *Reactor) Receive(e p2p.Envelope) {
 
 // recentSnapshots fetches the n most recent snapshots from the app.
 func (r *Reactor) recentSnapshots(n uint32) ([]*snapshot, error) {
-	resp, err := r.conn.ListSnapshots(context.TODO(), &abci.ListSnapshotsRequest{})
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", r.ChainID)
+
+	resp, err := r.conn.ListSnapshots(ctx, &abci.ListSnapshotsRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +296,7 @@ func (r *Reactor) Sync(stateProvider StateProvider, discoveryTime time.Duration)
 		return sm.State{}, nil, errors.New("a state sync is already in progress")
 	}
 	r.metrics.Syncing.Set(1)
-	r.syncer = newSyncer(r.cfg, r.Logger, r.conn, r.connQuery, stateProvider, r.tempDir)
+	r.syncer = newSyncer(r.cfg, r.Logger, r.conn, r.connQuery, stateProvider, r.tempDir, syncerWithChainID(r.ChainID))
 	r.mtx.Unlock()
 
 	hook := func() {

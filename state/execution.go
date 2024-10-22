@@ -132,6 +132,10 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxReapBytes, maxGas)
 	commit := lastExtCommit.ToCommit()
 	block := state.MakeBlock(height, txs, commit, evidence, proposerAddr)
+
+	// Inject the ChainID for access in ABCI
+	ctx = context.WithValue(ctx, "ChainID", state.ChainID)
+
 	rpp, err := blockExec.proxyApp.PrepareProposal(
 		ctx,
 		&abci.PrepareProposalRequest{
@@ -169,7 +173,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	block *types.Block,
 	state State,
 ) (bool, error) {
-	resp, err := blockExec.proxyApp.ProcessProposal(context.TODO(), &abci.ProcessProposalRequest{
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", state.ChainID)
+
+	resp, err := blockExec.proxyApp.ProcessProposal(ctx, &abci.ProcessProposalRequest{
 		Hash:               block.Header.Hash(),
 		Height:             block.Header.Height,
 		Time:               block.Header.Time,
@@ -226,7 +234,12 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, block *types.Block, syncingToHeight int64) (State, error) {
 	startTime := cmttime.Now().UnixNano()
-	abciResponse, err := blockExec.proxyApp.FinalizeBlock(context.TODO(), &abci.FinalizeBlockRequest{
+
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", state.ChainID)
+
+	abciResponse, err := blockExec.proxyApp.FinalizeBlock(ctx, &abci.FinalizeBlockRequest{
 		Hash:               block.Hash(),
 		NextValidatorsHash: block.NextValidatorsHash,
 		ProposerAddress:    block.ProposerAddress,
@@ -348,6 +361,9 @@ func (blockExec *BlockExecutor) ExtendVote(
 		ProposerAddress:    block.ProposerAddress,
 	}
 
+	// Inject the ChainID for access in ABCI
+	ctx = context.WithValue(ctx, "ChainID", state.ChainID)
+
 	resp, err := blockExec.proxyApp.ExtendVote(ctx, &req)
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
@@ -406,8 +422,12 @@ func (blockExec *BlockExecutor) Commit(
 		return 0, err
 	}
 
+	// Inject the ChainID for access in ABCI
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", state.ChainID)
+
 	// Commit block, get hash back
-	res, err := blockExec.proxyApp.Commit(context.TODO())
+	res, err := blockExec.proxyApp.Commit(ctx)
 	if err != nil {
 		unlockMempool()
 		blockExec.logger.Error("client error during proxyAppConn.CommitSync", "err", err)
