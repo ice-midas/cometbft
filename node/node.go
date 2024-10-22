@@ -575,6 +575,74 @@ func NewNodeWithCliParams(ctx context.Context,
 	return node, nil
 }
 
+// NewNodeWithServices returns a new, ready to go, CometBFT node.
+//
+// This method creates a [Node] instance of which all services are created
+// asynchronously. It permits to externalize (or export) the initialization
+// of required node services.
+//
+// Note that [p2p.BaseReactor] implementing instances are retrieved from the
+// switch instance defined with [p2p.Switch]. This drastically reduces the
+// amount of memory allocated when creating the instance.
+//
+// TODO(midas): We may need/prefer a service providers approach here.
+func NewNodeWithServices(
+	config *cfg.Config,
+	genDoc *types.GenesisDoc,
+	nodeInfo p2p.NodeInfo,
+	nodeKey *p2p.NodeKey,
+
+	privValidator types.PrivValidator,
+	addrBook pex.AddrBook,
+	transport *p2p.MultiplexTransport,
+
+	sw *p2p.Switch,
+	eventBus *types.EventBus,
+	proxyApp proxy.AppConns,
+	mempool mempl.Mempool,
+	evidencePool *evidence.Pool,
+	pruner *sm.Pruner,
+
+	indexerService *txindex.IndexerService,
+	stateStore sm.Store,
+	blockStore *store.BlockStore,
+	consensusState *cs.State,
+	stateSync bool,
+	stateSyncGenesis sm.State,
+) *Node {
+	return &Node{
+		config:        config,
+		genesisDoc:    genDoc,
+		privValidator: privValidator,
+		nodeKey:       nodeKey,
+		nodeInfo:      nodeInfo,
+		transport:     transport,
+
+		addrBook:     addrBook,
+		sw:           sw,
+		eventBus:     eventBus,
+		pruner:       pruner,
+		mempool:      mempool,
+		proxyApp:     proxyApp,
+		evidencePool: evidencePool,
+
+		stateSync:        stateSync,
+		stateSyncGenesis: stateSyncGenesis, // Shouldn't be necessary, but need a way to pass the genesis state
+		consensusState:   consensusState,
+		stateStore:       stateStore,
+		blockStore:       blockStore,
+		indexerService:   indexerService,
+		txIndexer:        indexerService.GetTxIndexer(),
+		blockIndexer:     indexerService.GetBlockIndexer(),
+
+		bcReactor:        sw.Reactor("BLOCKSYNC"),
+		mempoolReactor:   sw.Reactor("MEMPOOL").(*mempl.Reactor),
+		consensusReactor: sw.Reactor("CONSENSUS").(*cs.Reactor),
+		stateSyncReactor: sw.Reactor("STATESYNC").(*statesync.Reactor),
+		pexReactor:       sw.Reactor("PEX").(*pex.Reactor),
+	}
+}
+
 // OnStart starts the Node. It implements service.Service.
 func (n *Node) OnStart() error {
 	now := cmttime.Now()
@@ -980,6 +1048,16 @@ func (n *Node) PrivValidator() types.PrivValidator {
 	return n.privValidator
 }
 
+// SetPrivValidator sets the [types.PrivValidator] instance.
+func (n *Node) SetPrivValidator(pv types.PrivValidator) {
+	n.privValidator = pv
+}
+
+// NodeKey returns the node's p2p key as defined with [p2p.NodeKey].
+func (n *Node) NodeKey() *p2p.NodeKey {
+	return n.nodeKey
+}
+
 // GenesisDoc returns the Node's GenesisDoc.
 func (n *Node) GenesisDoc() *types.GenesisDoc {
 	return n.genesisDoc
@@ -993,6 +1071,11 @@ func (n *Node) ProxyApp() proxy.AppConns {
 // Config returns the Node's config.
 func (n *Node) Config() *cfg.Config {
 	return n.config
+}
+
+// SetWalFile sets the WAL file path in the [config.ConsensusConfig].
+func (n *Node) SetWalFile(walFile string) {
+	n.Config().Consensus.SetWalFile(walFile)
 }
 
 // ------------------------------------------------------------------------------
