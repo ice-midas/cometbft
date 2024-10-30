@@ -1,16 +1,19 @@
 package snapsapp_test
 
 import (
+	"encoding/hex"
 	"os"
+	"strings"
 	"testing"
-
-	dbm "github.com/cometbft/cometbft-db"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
+	"github.com/cometbft/cometbft/node"
+	"github.com/cometbft/cometbft/p2p"
 	sm "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/types"
 	cmttime "github.com/cometbft/cometbft/types/time"
@@ -21,9 +24,10 @@ import (
 
 type (
 	SnapsAppSuite struct {
-		snapsApp    *snapsapp.SnapsApp
-		chainStores mx.MultiplexChainStore
-		logger      cmtlog.Logger
+		snapsApp *snapsapp.SnapsApp
+		reactor  *mx.Reactor
+		logger   cmtlog.Logger
+		rootDir  string
 	}
 
 	SnapshotsConfig struct {
@@ -34,37 +38,56 @@ type (
 )
 
 const (
-	exampleChainID = "mx-chain-CC8E6555A3F401FF61DA098F94D325E7041BC43A-1A63C0E60122F9BB"
+	baseExampleChainID = "mx-chain-CC8E6555A3F401FF61DA098F94D325E7041BC43A-"
 )
+
+// mockGenesisDocSetProviderFunc mocks a GenesisDocSet provider helper.
+func mockGenesisDocSetProviderFunc(withChainID string) node.GenesisDocProvider {
+	return func() (node.IChecksummedGenesisDoc, error) {
+		// random validators, careful with this provider.
+		valPubKey := ed25519.GenPrivKey().PubKey()
+		return &mx.ChecksummedGenesisDocSet{
+			GenesisDocs: mx.GenesisDocSet{
+				types.GenesisDoc{
+					GenesisTime:   cmttime.Now(),
+					ChainID:       withChainID,
+					InitialHeight: 1000,
+					Validators: []types.GenesisValidator{{
+						Address: valPubKey.Address(),
+						PubKey:  valPubKey,
+						Power:   10,
+						Name:    "myval",
+					}},
+					ConsensusParams: types.DefaultConsensusParams(),
+					AppHash:         []byte{1, 2, 3},
+					AppState:        []byte(`{"account_owner":"Bob"}`),
+				},
+			},
+			Sha256Checksum: []byte{1, 2, 3},
+		}, nil
+	}
+}
 
 func NewSnapsAppSuite(t *testing.T, opts ...func(*snapsapp.SnapsApp)) *SnapsAppSuite {
 	t.Helper()
 
-	rootDir, conf, chainRegistry, multiplexFS, multiplexStore := prepareMultiplex(t)
-	defer os.RemoveAll(rootDir)
+	rootDir, _, testReactor := prepareMultiplexReactor(t)
 
 	logger := cmtlog.NewNopLogger()
-	app := snapsapp.NewSnapsApplication(
-		conf,
-		chainRegistry,
-		multiplexFS,
-		multiplexStore,
-		logger,
-	)
+	app := snapsapp.NewSnapsApplication(testReactor, config.NewSnapshotOptions(1, 1, 1), logger)
 
 	return &SnapsAppSuite{
-		snapsApp:    app,
-		chainStores: multiplexStore,
-		logger:      logger,
+		snapsApp: app,
+		reactor:  testReactor,
+		logger:   logger,
+		rootDir:  rootDir,
 	}
 }
 
-func prepareMultiplex(t *testing.T) (
+func prepareMultiplexReactor(t *testing.T) (
 	string,
 	*config.Config,
-	mx.ChainRegistry,
-	mx.MultiplexFS,
-	mx.MultiplexChainStore,
+	*mx.Reactor,
 ) {
 	t.Helper()
 
@@ -73,12 +96,18 @@ func prepareMultiplex(t *testing.T) (
 		panic(err)
 	}
 
+	// Create a custom chain id for each iteration (based on test name)
+	// This should be random enough to produce non-repeating values
+	testChainId := baseExampleChainID + strings.ToUpper(hex.EncodeToString(
+		tmhash.Sum([]byte(t.Name()))[:8], // 8 bytes only
+	))
+
 	conf := config.TestConfig()
 	conf.BaseConfig = config.MultiplexTestBaseConfig(
 		map[string]*config.StateSyncConfig{},
 		map[string]string{},
 		map[string][]string{"CC8E6555A3F401FF61DA098F94D325E7041BC43A": {
-			exampleChainID,
+			testChainId,
 		}},
 	)
 	conf.SetRoot(rootDir)
@@ -87,36 +116,28 @@ func prepareMultiplex(t *testing.T) (
 	conf.SnapshotOptions[config.NewReplicationStrategy("Network")] = config.NewSnapshotOptions(1, 1000, 3)
 	conf.SnapshotOptions[config.NewReplicationStrategy("History")] = config.NewSnapshotOptions(2, 2000, 3)
 
-	chainRegistry, err := mx.NewChainRegistry(&conf.MultiplexConfig)
-	require.NoError(t, err, "should create multiplex chain registry")
+	nodeKey := makeRandomNodeKey()
+	testChainRegistry, err := mx.NewChainRegistry(&conf.MultiplexConfig)
+	require.NoError(t, err, "should create chain registry instance")
 
-	multiplexFS, err := mx.NewMultiplexFS(conf)
-	require.NoError(t, err, "should create multiplex filesystem paths")
-
-	multiplexDB := mx.MultiplexDB{}
-	for _, chainId := range chainRegistry.GetChains() {
-		dbDir, err := os.MkdirTemp("", "test-mx-db-"+chainId)
-		require.NoError(t, err, "should create custom database directory")
-
-		db, err := dbm.NewDB(chainId, dbm.BackendType("memdb"), dbDir)
-		require.NoError(t, err, "should create databases for chain")
-
-		multiplexDB[chainId] = &mx.ChainDB{
-			ChainID: chainId,
-			DB:      db,
-		}
-	}
-
-	multiplexStore := mx.NewMultiplexChainStore(
-		multiplexDB,
-		sm.StoreOptions{
-			DiscardABCIResponses: false,
-			DBKeyLayout:          "v2",
-		},
+	// Test Reactor implementation in multiplex package
+	testReactor := mx.NewReactor(
+		nodeKey,
+		conf,
+		cmtlog.NewNopLogger(),
+		testChainRegistry,
+		mockGenesisDocSetProviderFunc(testChainId),
 	)
-	require.Len(t, multiplexStore, 1)
 
-	return rootDir, conf, chainRegistry, multiplexFS, multiplexStore
+	err = testReactor.Start()
+	require.NoError(t, err, "should not error starting multiplex reactor")
+
+	return rootDir, conf, testReactor
+}
+
+func makeRandomNodeKey() *p2p.NodeKey {
+	priv := ed25519.GenPrivKey()
+	return &p2p.NodeKey{PrivKey: priv}
 }
 
 func makeState(

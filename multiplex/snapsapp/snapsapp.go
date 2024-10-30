@@ -9,7 +9,6 @@ import (
 	"github.com/cometbft/cometbft/config"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 
-	mx "github.com/cometbft/cometbft/multiplex"
 	"github.com/cometbft/cometbft/multiplex/snapshots"
 )
 
@@ -43,8 +42,8 @@ type SnapsApp struct {
 	// A logger instance to report asynchronous ABCI messages.
 	logger cmtlog.Logger
 
-	// A multiplex chain registry as defined with [mx.ChainRegistry].
-	chainRegistry mx.ChainRegistry
+	// A multiplex reactor as described with [Reactor].
+	reactor Reactor
 
 	// A map of [snapshots.Manager] instances mapped to ChainID values.
 	snapshotManagers map[string]*snapshots.Manager
@@ -67,19 +66,17 @@ var _ abcitypes.Application = (*SnapsApp)(nil)
 // NewSnapsApplication creates a [SnapsApp] ABCI application instance and
 // initializes a [snapshots.Manager] for every replicated chain.
 func NewSnapsApplication(
-	conf *config.Config,
-	chainRegistry mx.ChainRegistry,
-	multiplexStorage mx.MultiplexFS,
-	multiplexState mx.MultiplexChainStore,
+	reactor Reactor,
+	snapshotOptions config.SnapshotOptions,
 	logger cmtlog.Logger,
 	options ...func(*SnapsApp),
 ) *SnapsApp {
 	app := &SnapsApp{
-		chainRegistry: chainRegistry,
-		logger:        logger,
-		chMutex:       new(sync.RWMutex),
-		ihMutex:       new(sync.RWMutex),
-		fbMutex:       new(sync.RWMutex),
+		reactor: reactor,
+		logger:  logger,
+		chMutex: new(sync.RWMutex),
+		ihMutex: new(sync.RWMutex),
+		fbMutex: new(sync.RWMutex),
 	}
 
 	// Apply all options before anything else
@@ -87,12 +84,9 @@ func NewSnapsApplication(
 		option(app)
 	}
 
-	// Support multiple replication strategies, each defining their own format.
-	mode := conf.Strategy
-	opts := conf.SnapshotOptions[mode]
-
 	// Use the chain registry to determine which chains are of interest
-	replicatedChains := chainRegistry.GetChains()
+	replicatedChains := reactor.GetNetworks()
+	storagePaths := reactor.GetStoragePaths()
 
 	// initial heights are thread-safe
 	app.ihMutex.Lock()
@@ -114,7 +108,7 @@ func NewSnapsApplication(
 	for _, chainId := range replicatedChains {
 		// Snapshots are stored in a different subfolder per chain
 		// i.e.: %rootDir%/data/%address%/%ChainID%/snapshots/...
-		chainDataFolder := multiplexStorage[chainId]
+		chainDataFolder := storagePaths[chainId]
 		snapshotsFolder := filepath.Join(chainDataFolder, "snapshots")
 
 		// A snapshots store creates a `metadata.db` file and folders per-height
@@ -124,10 +118,7 @@ func NewSnapsApplication(
 		}
 
 		// Retrieve a particular chain's state machine store
-		chainStore, err := mx.NewChainStateStore(multiplexState, chainId)
-		if err != nil {
-			panic(fmt.Errorf("could not retrieve chain store: %w", err))
-		}
+		chainStore := reactor.GetStateStore(chainId)
 
 		// The chain state machine implementation is passed as a commitment
 		// snapshotter - which executes after a block is commited.
@@ -135,7 +126,7 @@ func NewSnapsApplication(
 		manager := snapshots.NewManager(
 			chainId,
 			snapshotStore,
-			opts,
+			snapshotOptions,
 			chainStore,
 			logger,
 		)
@@ -175,36 +166,5 @@ func (app *SnapsApp) setFinalizeBlockHeight(chainId string, reqHeight int64) err
 	defer app.fbMutex.Unlock()
 
 	app.finalizeBlockHeights[chainId] = reqHeight
-	return nil
-}
-
-func (app *SnapsApp) validateFinalizeBlockHeight(chainId string, reqHeight int64) error {
-	if reqHeight < 1 {
-		return fmt.Errorf("invalid height: %d", reqHeight)
-	}
-
-	lastBlockHeight := app.LastBlockHeight(chainId)
-	chainInitialHeight := app.InitialHeight(chainId)
-	finalizeBlockHeight := app.FinalizeBlockHeight(chainId)
-
-	// expectedHeight holds the expected height to validate
-	var expectedHeight int64
-	if finalizeBlockHeight == 0 && chainInitialHeight > 1 {
-		// In this case, we're validating the first block of the chain, i.e no
-		// previous commit. The height we're expecting is the initial height.
-		expectedHeight = chainInitialHeight
-	} else {
-		// This case can mean two things:
-		//
-		// - Either there was already a previous commit in the store, in which
-		// case we increment the version from there.
-		// - Or there was no previous commit, in which case we start at version 1.
-		expectedHeight = lastBlockHeight + 1
-	}
-
-	if reqHeight != expectedHeight {
-		return fmt.Errorf("invalid height: %d; expected: %d", reqHeight, expectedHeight)
-	}
-
 	return nil
 }

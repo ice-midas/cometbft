@@ -2,8 +2,10 @@ package snapsapp
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
 
@@ -26,7 +28,7 @@ func (app *SnapsApp) InitChain(
 	chainId := req.ChainId
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		return nil, fmt.Errorf("invalid chain-id on InitChain: %s is not replicated", chainId)
 	}
 
@@ -82,7 +84,7 @@ func (app *SnapsApp) Info(
 	chainId := ctx.Value("ChainID").(string)
 
 	// Make sure we handle only relevant info requests
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		app.logger.Error("received irrelevant snapshot chain identifier (Info)", "chain_id", chainId)
 		return &abcitypes.InfoResponse{}, nil
 	}
@@ -142,7 +144,7 @@ func (app *SnapsApp) Commit(
 	}
 
 	// Make sure we handle only relevant commits
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		app.logger.Error("received irrelevant snapshot chain identifier (Commit)", "chain_id", chainId)
 		return resp, nil
 	}
@@ -184,7 +186,7 @@ func (app *SnapsApp) ListSnapshots(
 	resp := &abcitypes.ListSnapshotsResponse{Snapshots: []*abcitypes.Snapshot{}}
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		return nil, fmt.Errorf("invalid chain-id on ListSnapshots: %s is not replicated", chainId)
 	}
 
@@ -231,7 +233,7 @@ func (app *SnapsApp) OfferSnapshot(
 	chainId := ctx.Value("ChainID").(string)
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		app.logger.Error("received irrelevant snapshot chain identifier (OfferSnapshot)", "chain_id", chainId)
 		return &abcitypes.OfferSnapshotResponse{Result: abcitypes.OFFER_SNAPSHOT_RESULT_ABORT}, nil
 	}
@@ -308,7 +310,7 @@ func (app *SnapsApp) LoadSnapshotChunk(
 	chainId := ctx.Value("ChainID").(string)
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		return nil, fmt.Errorf("invalid chain-id on ListSnapshots: %s is not replicated", chainId)
 	}
 
@@ -349,7 +351,7 @@ func (app *SnapsApp) ApplySnapshotChunk(
 	chainId := ctx.Value("ChainID").(string)
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		app.logger.Error("received irrelevant snapshot chain identifier (ApplySnapshotChunk)", "chain_id", chainId)
 		return &abcitypes.ApplySnapshotChunkResponse{Result: abcitypes.APPLY_SNAPSHOT_CHUNK_RESULT_ABORT}, nil
 	}
@@ -418,6 +420,8 @@ func (app *SnapsApp) PrepareProposal(
 		}
 		txs = append(txs, tx)
 	}
+
+	// TODO(midas): add PrepareTransactions() callback for per-tx mutations/storage
 	return &abcitypes.PrepareProposalResponse{Txs: txs}, nil
 }
 
@@ -443,7 +447,7 @@ func (app *SnapsApp) ProcessProposal(
 	chainId := ctx.Value("ChainID").(string)
 
 	// Make sure we handle only relevant proposals
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		return nil, fmt.Errorf("received irrelevant chain identifier (ProcessProposal): %s", chainId)
 	}
 
@@ -459,6 +463,7 @@ func (app *SnapsApp) ProcessProposal(
 	app.currentHeights[chainId] = req.Height
 	app.chMutex.Unlock()
 
+	// TODO(midas): add ProcessTransactions() callback for per-tx processing
 	return &abcitypes.ProcessProposalResponse{Status: abcitypes.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
 }
 
@@ -495,7 +500,7 @@ func (app *SnapsApp) VerifyVoteExtension(context.Context, *abcitypes.VerifyVoteE
 
 // FinalizeBlock will execute the block proposal provided by FinalizeBlockRequest.
 //
-// Currently we do not perform any operation with transactions, thus the
+// Currently we do not perform any filtering with transactions, thus the
 // transactions are all deemed to be "valid".
 //
 // The finalizeBlockHeights is updated for the relevant chain such that the
@@ -514,17 +519,27 @@ func (app *SnapsApp) FinalizeBlock(
 	resp := &abcitypes.FinalizeBlockResponse{TxResults: []*abcitypes.ExecTxResult{}}
 
 	// Make sure we handle only relevant snapshotting routines
-	if !app.chainRegistry.HasChain(chainId) {
+	if !app.reactor.HasNetwork(chainId) {
 		return resp, fmt.Errorf("invalid chain-id on FinalizeBlock: %s is not replicated", chainId)
 	}
 
-	if err := app.validateFinalizeBlockHeight(chainId, req.Height); err != nil {
-		return nil, err
-	}
-
+	// Whenever there is transactions that are included in a *finalized*
+	// block, we create an [abcitypes.Event] which contains the transaction
+	// bytes as a hexadecimal string, the ChainID and the block height.
+	//
+	// These events can be subscribed for processing of individual transactions.
 	txs := make([]*abcitypes.ExecTxResult, len(req.Txs))
 	for i := range req.Txs {
-		txs[i] = &abcitypes.ExecTxResult{Code: abcitypes.CodeTypeOK}
+		txs[i] = &abcitypes.ExecTxResult{Code: abcitypes.CodeTypeOK, Events: []abcitypes.Event{
+			{
+				Type: "app",
+				Attributes: []abcitypes.EventAttribute{
+					{Key: "chain_id", Value: chainId, Index: true},
+					{Key: "height", Value: strconv.FormatInt(req.Height, 10), Index: true},
+					{Key: "tx", Value: hex.EncodeToString(req.Txs[i]), Index: true},
+				},
+			},
+		}}
 	}
 
 	// We can now safely store the finalized block height
