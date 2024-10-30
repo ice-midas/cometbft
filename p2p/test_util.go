@@ -23,6 +23,11 @@ type mockNodeInfo struct {
 	addr *NetAddress
 }
 
+// NewMockNodeInfo creates a mockNodeInfo around addr.
+func NewMockNodeInfo(addr *NetAddress) mockNodeInfo {
+	return mockNodeInfo{addr: addr}
+}
+
 func (ni mockNodeInfo) ID() ID                           { return ni.addr.ID }
 func (ni mockNodeInfo) GetChannels() cmtbytes.HexBytes   { return cmtbytes.HexBytes{} }
 func (ni mockNodeInfo) NetAddress() (*NetAddress, error) { return ni.addr, nil }
