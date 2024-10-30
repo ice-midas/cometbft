@@ -1,6 +1,10 @@
 package multiplex
 
 import (
+	"path/filepath"
+	"regexp"
+	"strconv"
+
 	"github.com/cometbft/cometbft/config"
 )
 
@@ -92,4 +96,132 @@ func WithRPCStartPort(rpcStartPort uint16) func(*config.MultiplexConfig) {
 	return func(conf *config.MultiplexConfig) {
 		conf.RPCStartPort = rpcStartPort
 	}
+}
+
+// NewConfigOverwrite updates a node configuration in-place to overwrite the
+// services listen addresses such that there is one P2P- and one RPC port per
+// replicated chain. Following ports overwrite apply:
+//
+// - P2P: legacy `26656`, multiplex `30001`...`3000x` with x the index of nodes
+// - RPC: legacy `26657`, multiplex `40001`...`4000x` with x the index of nodes
+//
+// This method also overwrites the `P2P.Seeds` configuration option such that
+// each replicated chain uses its own seed nodes, and the `WAL` file is changed
+// so that each replicated chain writes to a separate WAL-file.
+// Also, state-sync is forcefully enabled because it is the preferred method
+// of synchronization with individual replicated chains.
+//
+// It returns the newly created *deep-copy* of the node configuration.
+func NewConfigOverwrite(
+	baseConfig *config.Config,
+	chainRegistry ChainRegistry,
+	withChainID string,
+) *config.Config {
+	// Multiplex can be configured to start at different port
+	p2pStartPort := int(baseConfig.P2PStartPort) // defaults to 30001
+	rpcStartPort := int(baseConfig.RPCStartPort) // defaults to 40001
+
+	// Find index of ChainID (deterministic due to sorting)
+	nodeIdx, err := chainRegistry.FindChain(withChainID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Errors would have been handled in above statement
+	address, _ := chainRegistry.GetAddress(withChainID)
+
+	// Seed nodes *may* be empty, error ignored here.
+	seedNodes, _ := chainRegistry.GetSeeds(withChainID)
+
+	// Sync configuration contains trust options for state-sync.
+	syncConfig, err := chainRegistry.GetStateSyncConfig(withChainID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deep-copy the config object to create multiple nodes
+	mxConfig := deepCopyConfig(baseConfig)
+
+	// ----------------------------
+	// P2P Configuration Overwrite
+	mxConfig.P2P.Seeds = seedNodes // CAUTION: always uses seeds!
+	mxConfig.P2P.ListenAddress = overwriteListenPort(
+		baseConfig.P2P.ListenAddress,
+		p2pStartPort+nodeIdx,
+	)
+
+	// ----------------------------
+	// RPC Configuration Overwrite
+	mxConfig.RPC.ListenAddress = overwriteListenPort(
+		baseConfig.RPC.ListenAddress,
+		rpcStartPort+nodeIdx,
+	)
+
+	// ----------------------------
+	// WAL Configuration Overwrite
+	// i.e.: data/%address%/%ChainID%/wal
+	dataDir := filepath.Join(baseConfig.RootDir, config.DefaultDataDir)
+	walFile := filepath.Join(dataDir, address, withChainID, "wal")
+	walPath := filepath.Join(config.DefaultDataDir, address, withChainID, "wal")
+
+	// We overwrite the wal file to allow parallel I/O for multiple nodes
+	mxConfig.Consensus.SetWalFile(walFile)
+	mxConfig.Consensus.WalPath = walPath
+
+	// ----------------------------
+	// Sync Configuration Overwrite
+	// We enable state-sync here if the config requires it
+	mxConfig.StateSync.Enable = syncConfig.Enable
+	mxConfig.StateSync.TrustPeriod = syncConfig.TrustPeriod
+	mxConfig.StateSync.TrustHeight = syncConfig.TrustHeight
+	mxConfig.StateSync.TrustHash = syncConfig.TrustHash
+
+	// At least 2 witnesses are required for state-sync
+	mxConfig.StateSync.RPCServers = make([]string, len(syncConfig.RPCServers))
+	copy(mxConfig.StateSync.RPCServers, syncConfig.RPCServers[:])
+
+	return mxConfig
+}
+
+// -----------------------------------------------------------------------------
+// Private helpers implementation.
+
+// deepCopyConfig deep-copies a config pointer to create a new config object.
+func deepCopyConfig(cfg *config.Config) *config.Config {
+	// Re-allocate new config
+	next := &config.Config{
+		BaseConfig:      config.BaseConfig{},
+		RPC:             &config.RPCConfig{},
+		GRPC:            &config.GRPCConfig{},
+		P2P:             &config.P2PConfig{},
+		Mempool:         &config.MempoolConfig{},
+		StateSync:       &config.StateSyncConfig{},
+		BlockSync:       &config.BlockSyncConfig{},
+		Consensus:       &config.ConsensusConfig{},
+		Storage:         &config.StorageConfig{},
+		TxIndex:         &config.TxIndexConfig{},
+		Instrumentation: &config.InstrumentationConfig{},
+	}
+
+	// Copy values from base
+	next.BaseConfig = cfg.BaseConfig
+	*next.RPC = *cfg.RPC
+	*next.GRPC = *cfg.GRPC
+	*next.P2P = *cfg.P2P
+	*next.Mempool = *cfg.Mempool
+	*next.StateSync = *cfg.StateSync
+	*next.BlockSync = *cfg.BlockSync
+	*next.Consensus = *cfg.Consensus
+	*next.Storage = *cfg.Storage
+	*next.TxIndex = *cfg.TxIndex
+	*next.Instrumentation = *cfg.Instrumentation
+
+	return next
+}
+
+// overwriteListenPort replaces the port in a service listen address.
+func overwriteListenPort(laddr string, port int) string {
+	re := regexp.MustCompile(`(.*)(\:\d+)(.*)`)
+	newPort := ":" + strconv.Itoa(port)
+	return re.ReplaceAllString(laddr, `$1`+newPort+`$3`)
 }

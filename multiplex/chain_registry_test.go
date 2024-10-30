@@ -2,12 +2,14 @@ package multiplex_test
 
 import (
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 
 	mx "github.com/cometbft/cometbft/multiplex"
@@ -177,5 +179,60 @@ func TestMultiplexChainRegistryNewChainRegistry(t *testing.T) {
 	assert.Equal(t, chainRegistry.GetChains()[0], "mx-chain-CC8E6555A3F401FF61DA098F94D325E7041BC43A-1A63C0E60122F9BB")
 	assert.Equal(t, chainRegistry.GetChains()[1], "mx-chain-CC8E6555A3F401FF61DA098F94D325E7041BC43A-D1ED2B487F2E93CC")
 	assert.Equal(t, chainRegistry.GetChains()[2], "mx-chain-FF1410CEEB411E55487701C4FEE65AACE7115DC0-79F77E672C1DB0BC")
+}
 
+func makeChainRegistryFromConfig(t testing.TB, conf config.MultiplexConfig) mx.ChainRegistry {
+	t.Helper()
+
+	chainRegistry, err := mx.NewChainRegistry(&conf)
+	require.NoError(t, err, "should create chain registry from config")
+
+	return chainRegistry
+}
+
+func makeRandomChainRegistry(t testing.TB, numChains int) mx.ChainRegistry {
+	t.Helper()
+
+	multiplexConfig := makeRandomMultiplexConfig(t, numChains)
+	chainRegistry, err := mx.NewChainRegistry(&multiplexConfig)
+	require.NoError(t, err, "should create chain registry from random config")
+
+	return chainRegistry
+}
+
+func makeRandomMultiplexConfig(t testing.TB, numChains int) config.MultiplexConfig {
+	t.Helper()
+
+	randomChainIDs := make([]string, numChains)
+	randChainSeeds := make(map[string]string, numChains)
+	randUserChains := make(map[string][]string, numChains)
+	stateSyncConfs := make(map[string]*config.StateSyncConfig, numChains)
+
+	for i := 0; i < numChains; i++ {
+		userPubKey := ed25519.GenPrivKey().PubKey()
+		userAddress := userPubKey.Address().String()
+		fingerprint := makeFingerprint("Posts") // This is the "scope"
+
+		chainId, err := mx.NewExtendedChainID(userAddress, fingerprint)
+		require.NoError(t, err, "should create random ChainID")
+
+		randUserChains[userAddress] = make([]string, 1)
+		randUserChains[userAddress][0] = chainId.String()
+
+		randomChainIDs[i] = chainId.String()
+		randChainSeeds[chainId.String()] = "seed" + strconv.Itoa(i) + "@127.0.0.1"
+		stateSyncConfs[chainId.String()] = config.DefaultStateSyncConfig()
+	}
+
+	return config.MultiplexConfig{
+		Strategy:     mx.NetworkReplicationStrategy(),
+		SyncConfig:   stateSyncConfs,
+		ChainSeeds:   randChainSeeds,
+		UserChains:   randUserChains,
+		P2PStartPort: 30001,
+		RPCStartPort: 40001,
+		SnapshotOptions: map[config.ReplicationStrategy]config.SnapshotOptions{
+			mx.NetworkReplicationStrategy(): config.NewSnapshotOptions(1, 1, 1),
+		},
+	}
 }
