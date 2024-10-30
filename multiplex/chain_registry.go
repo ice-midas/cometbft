@@ -11,6 +11,8 @@ import (
 
 	"github.com/cometbft/cometbft/config"
 	cmtos "github.com/cometbft/cometbft/internal/os"
+
+	"github.com/cometbft/cometbft/multiplex/client"
 )
 
 // -----------------------------------------------------------------------------
@@ -155,6 +157,14 @@ type ChainRegistryProvider func(*config.MultiplexConfig) (ChainRegistry, error)
 // configuration. It uses the UserChains field to create an [ExtendedChainID]
 // per each pair of user address and ChainID.
 //
+// Note that [GetSyncConfigExtension] and [GetSeedConfigExtension] may be
+// changed in `callbacks.go` to use a different configuration extension.
+//
+// It is safe to call the [client.InjectSyncConfig] extension and also
+// the [client.InjectChainSeeds] extension because the caller is still
+// preparing a [ChainRegistry] instance, as such, even if the extensions
+// implement blocking processes, they won't impact *runtime* afterwards.
+//
 // This method implementation supports concurrent calls.
 // NewChainRegistry implements ChainRegistryProvider
 func NewChainRegistry(conf *config.MultiplexConfig) (ChainRegistry, error) {
@@ -169,6 +179,14 @@ func NewChainRegistry(conf *config.MultiplexConfig) (ChainRegistry, error) {
 		err      error
 	}
 
+	// Uses the default extension implementation, i.e. deep-copy conf.StateSync
+	// see `multiplex/client.go` to use a custom state-sync config extension.
+	injectSyncConfig := client.InjectSyncConfig(conf, GetSyncConfigExtension())
+
+	// Uses the default extension implementation, i.e. deep-copy conf.ChainSeeds
+	// see `multiplex/client.go` to use a custom seed nodes config extension.
+	injectChainSeeds := client.InjectChainSeeds(conf, GetSeedConfigExtension())
+
 	// This implementation is cacheable in that the execution is guaranteed
 	// to be done only once. The returned ChainRegistry instance is the result
 	// of parsing the [config.MultiplexConfig] configuration object.
@@ -180,12 +198,12 @@ func NewChainRegistry(conf *config.MultiplexConfig) (ChainRegistry, error) {
 		registry.ReplicatedChains = []string{}
 
 		// Copy seed nodes and map to ChainID
-		for chainId, seedNodes := range conf.ChainSeeds {
+		for chainId, seedNodes := range injectChainSeeds {
 			registry.ChainSeeds[chainId] = seedNodes
 		}
 
 		// Copy state-sync config and map to ChainID
-		for chainId, syncConfig := range conf.SyncConfig {
+		for chainId, syncConfig := range injectSyncConfig {
 			registry.SyncConfig[chainId] = syncConfig
 		}
 

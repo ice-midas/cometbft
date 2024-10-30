@@ -9,6 +9,7 @@ import (
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
 
+	"github.com/cometbft/cometbft/multiplex/client"
 	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
 )
 
@@ -401,9 +402,12 @@ func (app *SnapsApp) ApplySnapshotChunk(
 //
 // PrepareProposal implements [abcitypes.Application]
 func (app *SnapsApp) PrepareProposal(
-	_ context.Context,
+	ctx context.Context,
 	req *abcitypes.PrepareProposalRequest,
 ) (*abcitypes.PrepareProposalResponse, error) {
+	// Retrieve ChainID from context
+	chainId := ctx.Value("ChainID").(string)
+
 	// CometBFT must never call PrepareProposal with a height of 0.
 	//
 	// Ref: https://github.com/cometbft/cometbft/blob/059798a4f5b0c9f52aa8655fa619054a0154088c/spec/core/state.md?plain=1#L37-L38
@@ -411,6 +415,8 @@ func (app *SnapsApp) PrepareProposal(
 		return nil, errors.New("PrepareProposal called with invalid height")
 	}
 
+	// Makes sure that the transaction bytes proposed do not overflow
+	// the MaxTxBytes value and discards data if necessary.
 	txs := make([][]byte, 0, len(req.Txs))
 	var totalBytes int64
 	for _, tx := range req.Txs {
@@ -421,8 +427,16 @@ func (app *SnapsApp) PrepareProposal(
 		txs = append(txs, tx)
 	}
 
+	// Uses the default extension implementation, i.e. deep-copy the transactions
+	// see `snapsapp/client.go` to use a custom transactions mutation extension.
+	preparedTxes := client.InjectPrepareProposal(
+		chainId,
+		txs,
+		GetPrepareProposalExtension(),
+	)
+
 	// TODO(midas): add PrepareTransactions() callback for per-tx mutations/storage
-	return &abcitypes.PrepareProposalResponse{Txs: txs}, nil
+	return &abcitypes.PrepareProposalResponse{Txs: preparedTxes}, nil
 }
 
 // ProcessProposal implements the ProcessProposal ABCI method and returns a
@@ -523,20 +537,28 @@ func (app *SnapsApp) FinalizeBlock(
 		return resp, fmt.Errorf("invalid chain-id on FinalizeBlock: %s is not replicated", chainId)
 	}
 
+	// Uses the default extension implementation, i.e. deep-copy the transactions
+	// see `snapsapp/client.go` to use a custom transactions mutation extension.
+	processedTxs := client.InjectFinalizeBlock(
+		chainId,
+		req.Txs,
+		GetFinalizeBlockExtension(),
+	)
+
 	// Whenever there is transactions that are included in a *finalized*
 	// block, we create an [abcitypes.Event] which contains the transaction
 	// bytes as a hexadecimal string, the ChainID and the block height.
 	//
 	// These events can be subscribed for processing of individual transactions.
-	txs := make([]*abcitypes.ExecTxResult, len(req.Txs))
-	for i := range req.Txs {
-		txs[i] = &abcitypes.ExecTxResult{Code: abcitypes.CodeTypeOK, Events: []abcitypes.Event{
+	txResults := make([]*abcitypes.ExecTxResult, len(processedTxs))
+	for i := range processedTxs {
+		txResults[i] = &abcitypes.ExecTxResult{Code: abcitypes.CodeTypeOK, Events: []abcitypes.Event{
 			{
 				Type: "app",
 				Attributes: []abcitypes.EventAttribute{
 					{Key: "chain_id", Value: chainId, Index: true},
 					{Key: "height", Value: strconv.FormatInt(req.Height, 10), Index: true},
-					{Key: "tx", Value: hex.EncodeToString(req.Txs[i]), Index: true},
+					{Key: "tx", Value: hex.EncodeToString(processedTxs[i]), Index: true},
 				},
 			},
 		}}
@@ -546,6 +568,6 @@ func (app *SnapsApp) FinalizeBlock(
 	app.setFinalizeBlockHeight(chainId, req.Height)
 
 	return &abcitypes.FinalizeBlockResponse{
-		TxResults: txs,
+		TxResults: txResults,
 	}, nil
 }

@@ -174,6 +174,10 @@ func TestABCI_Proposal_HappyPath(t *testing.T) {
 	chainStore := stateStoreProvider(testChainId).(*mx.ChainStateStore)
 	require.NotNil(t, chainStore)
 
+	// (0). Inject ChainID
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, "ChainID", testChainId)
+
 	// ---------------------
 	// (1). InitChain
 	_, err := suite.snapsApp.InitChain(context.TODO(), &abci.InitChainRequest{
@@ -190,7 +194,8 @@ func TestABCI_Proposal_HappyPath(t *testing.T) {
 		Height:     1,
 		Txs:        [][]byte{bytes_tx1, bytes_tx2},
 	}
-	resPrepareProposal, err := suite.snapsApp.PrepareProposal(context.TODO(), &reqPrepareProposal)
+
+	resPrepareProposal, err := suite.snapsApp.PrepareProposal(ctx, &reqPrepareProposal)
 	assert.NoError(t, err, "should not error given proposal request (PrepareProposal)")
 	assert.Equal(t, 2, len(resPrepareProposal.Txs))
 
@@ -201,9 +206,6 @@ func TestABCI_Proposal_HappyPath(t *testing.T) {
 		Txs:    reqProposalMergedTxBytes[:],
 		Height: reqPrepareProposal.Height,
 	}
-
-	ctx := context.TODO()
-	ctx = context.WithValue(ctx, "ChainID", testChainId)
 
 	resProcessProposal, err := suite.snapsApp.ProcessProposal(ctx, &reqProcessProposal)
 	assert.NoError(t, err, "should not error given proposal request (ProcessProposal)")

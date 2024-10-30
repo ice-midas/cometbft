@@ -13,6 +13,7 @@ import (
 	cmtos "github.com/cometbft/cometbft/internal/os"
 	sm "github.com/cometbft/cometbft/state"
 
+	"github.com/cometbft/cometbft/multiplex/client"
 	"github.com/cometbft/cometbft/multiplex/snapshots"
 	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
 )
@@ -191,6 +192,10 @@ func (store ChainStateStore) loadStateFromPayload(payload []byte) (state sm.Stat
 // contain a bytes payload of the state store. As such, each SnapshotItem
 // represents a state instance and snapshots contain only one item.
 //
+// It is safe to call the [client.InjectSnapshotMutation] extension because
+// the caller is inside a *separate* goroutine, spawned for the process of
+// creation of snapshots which is run in a separate goroutine.
+//
 // Snapshot implements [snapshottypes.StateSnapshotter]
 func (store ChainStateStore) Snapshot(
 	height uint64,
@@ -212,6 +217,14 @@ func (store ChainStateStore) Snapshot(
 		return fmt.Errorf("cannot snapshot future height %v", height)
 	}
 
+	// Uses the default extension implementation, i.e. deep-copy the sm.State
+	// see `multiplex/client.go` to use a custom state mutation extension.
+	stateBytes := client.InjectSnapshotMutation(
+		store.GetChainID(),
+		latestState.Bytes(),
+		GetSnapshotMutationExtension(),
+	)
+
 	// State is serialized as a stream of SnapshotItem Protobuf
 	// messages which contain a bytes payload of the state store.
 	// As such, each SnapshotItem represents a full state instance.
@@ -219,7 +232,7 @@ func (store ChainStateStore) Snapshot(
 		err = protoWriter.WriteMsg(&snapshottypes.SnapshotItem{
 			Item: &snapshottypes.SnapshotItem_Store{
 				Store: &snapshottypes.SnapshotStoreItem{
-					Payload: latestState.Bytes(),
+					Payload: stateBytes,
 				},
 			},
 		})
