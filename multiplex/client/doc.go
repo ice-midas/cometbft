@@ -33,5 +33,16 @@ You may implement other extensions and use them by modifying the source code
 at `multiplex/client.go`. This file is present only for this purpose, thus if
 the extension you are developing should *become the default*, you may as well
 just overwrite the `Default..Extension` method with your custom business logic.
+
+# Testing
+
+You can test the client package using the following unit test suite:
+
+```bash
+go test github.com/cometbft/cometbft/multiplex/client -test.v -count=1
+```
+
+Note that this test suite is apart from the `client` package and implemented
+in a `client_test` package instead.
 */
 package client

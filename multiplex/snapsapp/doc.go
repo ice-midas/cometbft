@@ -1,17 +1,8 @@
-# SnapsApp ABCI
-
+/*
 The `snapsapp` package implements a multi-network ABCI application that enables
 state snapshotting and bootstrapping nodes with state-sync.
 
-This document describes the `multiplex/snapsapp` implementation of the ABCI
-application interface, for more information on CometBFT state sync in general see:
-
-* [CometBFT State Sync for Developers](https://medium.com/cometbft/cometbft-core-state-sync-for-developers-70a96ba3ee35)
-* [ABCI State Sync](https://docs.cometbft.com/v1.0/explanation/core/state-sync)
-* [ABCI State Sync Methods](https://docs.cometbft.com/v1.0/spec/abci/abci++_basic_concepts#state-sync-methods)
-* [Cosmos-SDK State Sync Snapshotting](https://github.com/cosmos/cosmos-sdk/blob/release/v0.50.x/store/snapshots/README.md)
-
-## SnapsApp
+# Application
 
 The [SnapsApp] structure is configured via the following instances:
 
@@ -31,7 +22,7 @@ The SnapsApp ABCI application delegates to the snapshots manager and the
 snapshotter implementation for the underlying processes of taking snapshots
 and restoring them.
 
-### ABCI Interface
+# ABCI
 
 The most prominent methods implemented with the [SnapsApp] ABCI application
 include, but are not limited to:
@@ -47,7 +38,7 @@ include, but are not limited to:
 We also provide implementations for all other *required* methods, including
 for `PrepareProposal`, `ProcessProposal`, `FinalizeBlock` and `Commit`.
 
-## Testing
+# Testing
 
 You can test the ABCI methods using the following unit test suite:
 
@@ -57,3 +48,5 @@ go test github.com/cometbft/cometbft/multiplex/snapsapp -test.v -count=1
 
 Note that this test suite is apart from the `snapsapp` package and implemented
 in a `snapsapp_test` package instead.
+*/
+package snapsapp
