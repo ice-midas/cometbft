@@ -1,0 +1,283 @@
+package multiplex
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/internal/blocksync"
+	cs "github.com/cometbft/cometbft/internal/consensus"
+	"github.com/cometbft/cometbft/internal/evidence"
+	mempl "github.com/cometbft/cometbft/mempool"
+	sm "github.com/cometbft/cometbft/state"
+	"github.com/cometbft/cometbft/statesync"
+	bs "github.com/cometbft/cometbft/store"
+	"github.com/cometbft/cometbft/types"
+)
+
+// PrepareConsensusInstanceWithReactor initializes a consensus handshake.
+//
+// CAUTION: the consensus handshake (ABCI <> DB) must only be done when
+// state sync does not execute. This handshake is intended to synchronize
+// the database by executing blocks replay if necessary.
+//
+// After the handshake, this method will *re-load the state machine*.
+func (reactor *Reactor) PrepareConsensusInstanceWithReactor(
+	ctx context.Context,
+	chainId string,
+) error {
+	// First make sure the ABCI is setup correctly
+	if reactor.abciClient == nil {
+		return fmt.Errorf("missing ABCI client (proxyApp) for consensus handshake")
+	}
+
+	// Get this network's app connections for consensus
+	proxyApp := reactor.abciClient.ToAppConns(chainId)
+
+	// Used for retrieving GenesisDoc instance by chain
+	genesisDocProvider := reactor.GetGenesisProvider()
+	servicesProvider := reactor.GetServicesProvider()
+
+	// Used for retrieving state store instance by chain
+	stateProvider := reactor.GetInstanceProvider(KEY_STATE)
+	stateStoreProvider := reactor.GetInstanceProvider(KEY_STORE_STATE)
+	blockStoreProvider := reactor.GetInstanceProvider(KEY_STORE_BLOCK)
+
+	// Retrieve the correct instances/services by chain
+	genesisDoc := genesisDocProvider(chainId)
+	stateMachine := stateProvider(chainId).(sm.State)
+	stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+	blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
+	eventBus := servicesProvider(KEY_EVENTBUS, chainId).(*types.EventBus)
+
+	// 1) Consensus handshake with ABCI
+	handshaker := cs.NewHandshaker(
+		stateStore,
+		stateMachine,
+		blockStore,
+		genesisDoc,
+	)
+	handshaker.SetLogger(reactor.logger.With("module", "consensus"))
+	handshaker.SetEventBus(eventBus)
+	if err := handshaker.Handshake(ctx, proxyApp); err != nil {
+		return fmt.Errorf("error during consensus handshake: %v", err)
+	}
+
+	// 2) Reload the state after handshake succeeded.
+	//
+	// The state machine will have the Version.Consensus.App set by the Handshake,
+	// and may have other modifications as well, ie. depending on what happened
+	// during block replay.
+
+	_, err := stateStore.Load()
+	if err != nil {
+		return sm.ErrCannotLoadState{Err: err}
+	}
+
+	return nil
+}
+
+// CreateConsensusInstanceReactors creates all reactors necessary to setup
+// a node for being consensus-ready with a network.
+//
+// This method creates instances for the following services and reactors:
+//
+// 1) Create the mempool / mempool reactor
+// 2) Create the evidence pool / evidence reactor
+// 3) Create the block executor
+// 4) Create block-sync reactor
+// 5) Create consensus state / reactor
+// 6) Create state sync reactor
+//
+// Afterwards, pointers to the created instances are registered on the reactor.
+//
+// This method registers instances in the multiplexRegistry:
+// - `flag/stateSync`: A flag that determines whether state-sync must run.
+// - `flag/blockSync`: A flag that determines whether block-sync must run.
+//
+// This method also registers services in the servicesRegistry:
+// - `reactor/mempool`: The mempool reactor with Mempool ABCI conn.
+// - `reactor/blockSync`: The block-sync reactor with a block executor.
+// - `reactor/stateSync`: The state-sync reactor with Snapshot ABCI conn.
+// - `reactor/consensus`: The consensus reactor with WAL file overwrite.
+// - `reactor/evidence`: The evidence reactor around state- and block stores.
+func (reactor *Reactor) CreateConsensusInstanceReactors(
+	ctx context.Context,
+	chainId string,
+	stateSync bool,
+	blockSync bool,
+) error {
+	// First make sure the ABCI is setup correctly
+	if reactor.abciClient == nil {
+		return fmt.Errorf("missing ABCI client (proxyApp) for consensus execution")
+	}
+
+	// Used to retrieve configuration and state per chain.
+	configProvider := reactor.GetInstanceProvider(KEY_CONFIG)
+	statesProvider := reactor.GetInstanceProvider(KEY_STATE)
+	stateStoreProvider := reactor.GetInstanceProvider(KEY_STORE_STATE)
+	blockStoreProvider := reactor.GetInstanceProvider(KEY_STORE_BLOCK)
+	evidenceDbProvider := reactor.GetInstanceProvider(KEY_DB_BF)
+	privvalProvider := reactor.GetInstanceProvider(KEY_PRIVVAL)
+	servicesProvider := reactor.GetServicesProvider()
+
+	// The node config contains the configuration overwrite.
+	cfgOverwrite := configProvider(chainId).(*config.Config)
+	stateMachine := statesProvider(chainId).(sm.State)
+	privValidator := privvalProvider(chainId).(types.PrivValidator)
+	eventBus := servicesProvider(KEY_EVENTBUS, chainId).(*types.EventBus)
+
+	// Prometheus does not allow hyphens in metrics names, it must match
+	// following regexp: [a-zA-Z_:][a-zA-Z0-9_:]*
+	// see also: https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
+	metricsNames := cfgOverwrite.Instrumentation.Namespace + "_" + strings.Replace(chainId, "-", "_", -1)
+
+	// We can safely ignore the error because it triggers before in Reactor.
+	privValPubKey, _ := privValidator.GetPubKey()
+
+	// 0) Retrieve prometheus metrics providers per module
+	//
+	// Metrics providers are also scoped per ChainID
+	memplMetricsProvider := mempl.PrometheusMetrics(metricsNames, "chain_id", chainId)
+	stateMetricsProvider := sm.PrometheusMetrics(metricsNames, "chain_id", chainId)
+	bsyncMetricsProvider := blocksync.PrometheusMetrics(metricsNames, "chain_id", chainId)
+	ssyncMetricsProvider := statesync.PrometheusMetrics(metricsNames, "chain_id", chainId)
+	consensusMetricsProvider := cs.PrometheusMetrics(metricsNames, "chain_id", chainId)
+
+	// 1) Create the mempool / mempool reactor
+	//
+	// BREAKING: We do not permit using the NopMempool.
+	memplLogger := reactor.logger.With("module", "mempool")
+	mempool := mempl.NewCListMempool(
+		cfgOverwrite.Mempool,
+		reactor.abciClient.Mempool(chainId),
+		stateMachine.LastBlockHeight,
+		mempl.WithMetrics(memplMetricsProvider),
+		mempl.WithPreCheck(sm.TxPreCheck(stateMachine)),
+		mempl.WithPostCheck(sm.TxPostCheck(stateMachine)),
+	)
+	mempool.SetLogger(memplLogger)
+	mempoolReactor := mempl.NewReactor(
+		cfgOverwrite.Mempool,
+		mempool,
+		stateSync || blockSync, // "waitSync"
+	)
+	if cfgOverwrite.Consensus.WaitForTxs() {
+		mempool.EnableTxsAvailable()
+	}
+	mempoolReactor.SetLogger(memplLogger)
+
+	// 2) Create the evidence pool / evidence reactor
+	evidenceDB := evidenceDbProvider(chainId).(*ChainDB)
+	stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+	blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
+
+	evidenceLogger := reactor.logger.With("module", "evidence")
+	evidencePool, err := evidence.NewPool(
+		evidenceDB,
+		stateStore,
+		blockStore,
+		evidence.WithDBKeyLayout(cfgOverwrite.Storage.ExperimentalKeyLayout),
+	)
+	if err != nil {
+		return fmt.Errorf("error creating the evidence pool: %w", err)
+	}
+	evidenceReactor := evidence.NewReactor(evidencePool)
+	evidenceReactor.SetLogger(evidenceLogger)
+
+	// 3) Create the block executor
+	//
+	// Make a block executor for consensus and blocksync reactors to execute
+	// blocks - the block execute logs on the state module.
+	blockExecutor := sm.NewBlockExecutor(
+		stateStore,
+		reactor.logger.With("module", "state"),
+		reactor.abciClient.Consensus(chainId),
+		mempool,
+		evidencePool,
+		blockStore,
+		sm.BlockExecutorWithMetrics(stateMetricsProvider),
+	)
+
+	offlineStateSyncHeight := int64(0)
+	if blockStore.Height() == 0 {
+		offlineStateSyncHeight, err = blockExecutor.Store().GetOfflineStateSyncHeight()
+		if err != nil && err.Error() != "value empty" {
+			return fmt.Errorf(
+				"found inconsistent height for ChainID %s ; expected statesynced height %v: %w",
+				chainId, stateMachine.LastBlockHeight, err)
+		}
+	}
+
+	// 4) Create block-sync reactor
+	//
+	// Don't start block sync if we're doing a state sync first or if
+	// we are the only validator on the network (caller sets blockSync).
+	blockSyncReactor := blocksync.NewReactor(
+		stateMachine,
+		blockExecutor,
+		blockStore,
+		blockSync && !stateSync,
+		privValPubKey.Address(),
+		bsyncMetricsProvider,
+		offlineStateSyncHeight,
+	)
+	blockSyncReactor.SetLogger(reactor.logger.With("module", "blocksync"))
+
+	// 5) Create consensus state / reactor
+	//
+	// Note that using the config overwrite, we use a separate WAL-file
+	// for every replicated chain.
+	consensusLogger := reactor.logger.With("module", "consensus")
+	consensusState := cs.NewState(
+		cfgOverwrite.Consensus, // contains overwrite of WAL
+		stateMachine,
+		blockExecutor,
+		blockStore,
+		mempool,
+		evidencePool,
+		cs.StateMetrics(consensusMetricsProvider),
+		cs.OfflineStateSyncHeight(offlineStateSyncHeight),
+	)
+	consensusState.SetLogger(consensusLogger)
+	if privValidator != nil {
+		consensusState.SetPrivValidator(privValidator)
+	}
+	consensusReactor := cs.NewReactor(
+		consensusState,
+		stateSync || blockSync, // "waitSync"
+		cs.ReactorMetrics(consensusMetricsProvider),
+	)
+	consensusReactor.SetLogger(consensusLogger)
+	// services which will be publishing and/or subscribing for messages (events)
+	// consensusReactor will set it on consensusState and blockExecutor
+	consensusReactor.SetEventBus(eventBus)
+
+	// 6) Create state sync reactor
+	//
+	// Reset the offline state sync height and schedule a state sync if requested.
+	err = stateStore.SetOfflineStateSyncHeight(0)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to reset the offline state sync height for ChainID %s: %w", chainId, err)
+	}
+	stateSyncReactor := statesync.NewReactor(
+		*cfgOverwrite.StateSync,
+		reactor.abciClient.Snapshot(chainId),
+		reactor.abciClient.Query(chainId),
+		ssyncMetricsProvider,
+	)
+	stateSyncReactor.SetLogger(reactor.logger.With("module", "statesync"))
+
+	// Prepare registerable instances mapped to ChainID
+	reactor.RegisterService(KEY_REACTOR_MEMPOOL, chainId, mempoolReactor)
+	reactor.RegisterService(KEY_REACTOR_BLOCKSYNC, chainId, blockSyncReactor)
+	reactor.RegisterService(KEY_REACTOR_STATESYNC, chainId, stateSyncReactor)
+	reactor.RegisterService(KEY_REACTOR_CONSENSUS, chainId, consensusReactor)
+	reactor.RegisterService(KEY_REACTOR_EVIDENCE, chainId, evidenceReactor)
+	reactor.RegisterInstance(KEY_FLAG_STATESYNC, chainId, stateSync == true)
+	reactor.RegisterInstance(KEY_FLAG_BLOCKSYNC, chainId, blockSync == true)
+
+	return nil
+}

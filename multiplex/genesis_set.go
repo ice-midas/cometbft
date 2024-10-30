@@ -1,13 +1,18 @@
 package multiplex
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
 
+	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/merkle"
+	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/cometbft/cometbft/node"
 	types "github.com/cometbft/cometbft/types"
 )
 
@@ -23,6 +28,8 @@ type ChecksummedGenesisDocSet struct {
 	GenesisDocs    GenesisDocSet
 	Sha256Checksum []byte
 }
+
+var _ node.IChecksummedGenesisDoc = (*ChecksummedGenesisDocSet)(nil)
 
 // DefaultGenesisDoc() implements IChecksummedGenesisDoc
 func (c *ChecksummedGenesisDocSet) DefaultGenesisDoc() (*types.GenesisDoc, error) {
@@ -149,4 +156,65 @@ func GenesisDocSetFromFile(genDocSetFile string) (GenesisDocSet, error) {
 		return nil, fmt.Errorf("error reading GenesisDocSet at %s: %w", genDocSetFile, err)
 	}
 	return genDocSet, nil
+}
+
+// ChecksumGenesisDoc creates a SHA256 checksum of a [types.GenesisDoc]
+func ChecksumGenesisDoc(genesisDoc *types.GenesisDoc) ([]byte, error) {
+	jsonBlob, err := cmtjson.Marshal(genesisDoc)
+	if err != nil {
+		return []byte{}, fmt.Errorf("couldn't marshal GenesisDoc: %w", err)
+	}
+	return tmhash.Sum(jsonBlob), nil
+}
+
+// ValidateGenesisDocChecksum reads a genesis doc hash from the database
+// or inserts it if it's the first time. If it's not the first time, this
+// method will validate that the produced checksum matches the database one.
+func ValidateGenesisDocChecksum(database *ChainDB, genesisDoc *types.GenesisDoc) error {
+	// Used for verification after first run
+	genDocChecksum, err := ChecksumGenesisDoc(genesisDoc)
+
+	// Get genesis doc set hash from chain's database
+	genDocSetHashFromDB, err := database.Get(genesisDocHashKey)
+	if err != nil {
+		return fmt.Errorf(
+			"error retrieving genesis doc set hash: %w", err)
+	}
+
+	if len(genDocSetHashFromDB) == 0 {
+		// Save the genDoc hash in the store if it doesn't already exist for future verification
+		if err = database.SetSync(genesisDocHashKey, genDocChecksum); err != nil {
+			return fmt.Errorf(
+				"failed to save genesis doc hash to db: %w", err)
+		}
+	} else {
+		// Validates that the genesis doc hash in database matches
+		if !bytes.Equal(genDocSetHashFromDB, genDocChecksum) {
+			return errors.New(
+				"genesis doc hash in db does not match loaded genesis doc")
+		}
+	}
+
+	return nil
+}
+
+// MultiplexGenesisDocProviderFunc returns a [node.GenesisDocProvider] that loads
+// the GenesisDocSet from a config.GenesisFile() on the filesystem.
+//
+// CAUTION: this method expects the genesis file to contain a GenesisDocSet.
+func MultiplexGenesisDocProviderFunc(nodeCfg *config.Config) node.GenesisDocProvider {
+	return func() (node.IChecksummedGenesisDoc, error) {
+		jsonBlob, err := os.ReadFile(nodeCfg.GenesisFile())
+		if err != nil {
+			return nil, fmt.Errorf("couldn't read GenesisDocSet from file: %w", err)
+		}
+
+		genDocSet, err := GenesisDocSetFromJSON(jsonBlob)
+		if err != nil {
+			return nil, err
+		}
+
+		incomingChecksum := tmhash.Sum(jsonBlob)
+		return &ChecksummedGenesisDocSet{GenesisDocs: genDocSet, Sha256Checksum: incomingChecksum}, nil
+	}
 }

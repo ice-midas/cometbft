@@ -2,7 +2,6 @@ package multiplex_test
 
 import (
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +10,7 @@ import (
 	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtos "github.com/cometbft/cometbft/internal/os"
+	"github.com/cometbft/cometbft/p2p"
 
 	mx "github.com/cometbft/cometbft/multiplex"
 )
@@ -181,6 +181,138 @@ func TestMultiplexChainRegistryNewChainRegistry(t *testing.T) {
 	assert.Equal(t, chainRegistry.GetChains()[2], "mx-chain-FF1410CEEB411E55487701C4FEE65AACE7115DC0-79F77E672C1DB0BC")
 }
 
+func TestMultiplexChainRegistryGetStateSyncConfig(t *testing.T) {
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(rootDir)
+
+	nodeCfg := config.TestConfig()
+	nodeCfg.SetRoot(rootDir)
+	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, 5) // 5 distinct networks
+
+	testChainRegistry, err := mx.NewChainRegistry(&nodeCfg.MultiplexConfig)
+	require.NoError(t, err, "should create chain registry from random multiplex config")
+
+	// We can safely iterate the networks list from registry
+	// because state-sync config is not ordered specifically
+	for _, chainId := range testChainRegistry.GetChains() {
+		actualStateSyncConf, err := testChainRegistry.GetStateSyncConfig(chainId)
+		assert.NoError(t, err, "should not error given existing ChainID")
+		assert.NotNil(t, actualStateSyncConf)
+		assert.IsType(t, &config.StateSyncConfig{}, actualStateSyncConf)
+	}
+
+	// Make sure invalid ChainID produce errors
+	testFailCases := []string{
+		"this-chainid-doesnt-exist",
+		"nor-does-this-one",
+		"or also  this one",
+	}
+	for _, failChainId := range testFailCases {
+		_, err := testChainRegistry.GetAddress(failChainId)
+		assert.Error(t, err, "should error given unknown or invalid ChainID")
+	}
+}
+
+func TestMultiplexChainRegistryGetSeeds(t *testing.T) {
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(rootDir)
+
+	nodeCfg := config.TestConfig()
+	nodeCfg.SetRoot(rootDir)
+	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, 5) // 5 distinct networks
+
+	testChainRegistry, err := mx.NewChainRegistry(&nodeCfg.MultiplexConfig)
+	require.NoError(t, err, "should create chain registry from random multiplex config")
+
+	// We can safely iterate the networks list from registry
+	// because seed nodes config is not ordered specifically
+	for _, chainId := range testChainRegistry.GetChains() {
+		actualSeeds, err := testChainRegistry.GetSeeds(chainId)
+		assert.NoError(t, err, "should not error given existing ChainID")
+		assert.NotNil(t, actualSeeds)
+		assert.NotEmpty(t, actualSeeds)
+	}
+
+	// Make sure invalid ChainID produce errors
+	testFailCases := []string{
+		"this-chainid-doesnt-exist",
+		"nor-does-this-one",
+		"or also  this one",
+	}
+	for _, failChainId := range testFailCases {
+		_, err := testChainRegistry.GetAddress(failChainId)
+		assert.Error(t, err, "should error given unknown or invalid ChainID")
+	}
+}
+
+func TestMultiplexChainRegistryGetAddress(t *testing.T) {
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(rootDir)
+
+	nodeCfg := config.TestConfig()
+	nodeCfg.SetRoot(rootDir)
+	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, 5) // 5 distinct networks
+
+	testChainRegistry, err := mx.NewChainRegistry(&nodeCfg.MultiplexConfig)
+	require.NoError(t, err, "should create chain registry from random multiplex config")
+
+	// Iterate the CONFIG to test for correct addresses retrievals
+	for userAddress, chainIds := range nodeCfg.UserChains {
+		for _, chainId := range chainIds {
+			actualAddress, err := testChainRegistry.GetAddress(chainId)
+			assert.NoError(t, err, "should not error given existing ChainID")
+			assert.Equal(t, userAddress, actualAddress)
+		}
+	}
+
+	// Make sure invalid ChainID produce errors
+	testFailCases := []string{
+		"this-chainid-doesnt-exist",
+		"nor-does-this-one",
+		"or also  this one",
+	}
+	for _, failChainId := range testFailCases {
+		_, err := testChainRegistry.GetAddress(failChainId)
+		assert.Error(t, err, "should error given unknown or invalid ChainID")
+	}
+}
+
+func TestMultiplexChainRegistryFindChain(t *testing.T) {
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(rootDir)
+
+	nodeCfg := config.TestConfig()
+	nodeCfg.SetRoot(rootDir)
+	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, 5) // 5 distinct networks
+
+	testChainRegistry, err := mx.NewChainRegistry(&nodeCfg.MultiplexConfig)
+	require.NoError(t, err, "should create chain registry from random multiplex config")
+
+	// GetChains is tested to return an alphabetically ordered slice of ChainID
+	for index, chainId := range testChainRegistry.GetChains() {
+		// Should return the correct index in ordered slice
+		actualIndex, err := testChainRegistry.FindChain(chainId)
+		assert.NoError(t, err)
+		assert.Equal(t, index, actualIndex)
+	}
+
+	// Make sure invalid ChainID produce errors and return -1
+	testFailCases := []string{
+		"this-chainid-doesnt-exist",
+		"nor-does-this-one",
+		"or also  this one",
+	}
+	for _, failChainId := range testFailCases {
+		errIndex, err := testChainRegistry.FindChain(failChainId)
+		assert.Error(t, err, "should error given unknown or invalid ChainID")
+		assert.Equal(t, -1, errIndex, "should return -1 given unknown or invalid ChainID")
+	}
+}
+
 func makeChainRegistryFromConfig(t testing.TB, conf config.MultiplexConfig) mx.ChainRegistry {
 	t.Helper()
 
@@ -219,8 +351,12 @@ func makeRandomMultiplexConfig(t testing.TB, numChains int) config.MultiplexConf
 		randUserChains[userAddress] = make([]string, 1)
 		randUserChains[userAddress][0] = chainId.String()
 
+		// Uses a fake (random) seed node ID
+		testSeedNodeKey := &p2p.NodeKey{PrivKey: ed25519.GenPrivKey()}
+		testSeedNodeId := testSeedNodeKey.ID()
+
 		randomChainIDs[i] = chainId.String()
-		randChainSeeds[chainId.String()] = "seed" + strconv.Itoa(i) + "@127.0.0.1"
+		randChainSeeds[chainId.String()] = string(testSeedNodeId) + "@127.0.0.1:30001"
 		stateSyncConfs[chainId.String()] = config.DefaultStateSyncConfig()
 	}
 

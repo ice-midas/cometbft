@@ -1,6 +1,7 @@
 package multiplex_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -230,6 +232,36 @@ func TestMultiplexGenesisDocSetSearchGenesisDocByChainID(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, false, ok)
 		assert.Empty(t, doc)
+	}
+}
+
+func TestMultiplexGenesisDocSetValidateGenesisDocChecksum(t *testing.T) {
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(rootDir)
+
+	genesisDocSet := randomGenesisDocSet(3)
+	for i, genesisDoc := range genesisDocSet {
+		dbName := "genesis-" + strconv.Itoa(i)
+		db, err := dbm.NewDB(dbName, dbm.BackendType("memdb"), rootDir)
+		require.NoError(t, err)
+
+		genesisDocJSON, err := cmtjson.Marshal(genesisDoc)
+		expectedSha256 := tmhash.Sum(genesisDocJSON)
+
+		err = mx.ValidateGenesisDocChecksum(
+			&mx.ChainDB{
+				ChainID: "test",
+				DB:      db,
+			},
+			&genesisDoc,
+		)
+		assert.NoError(t, err)
+
+		// Should save the genesis doc hash in db
+		actualSha256, err := db.Get(genesisDocHashKey)
+		assert.NoError(t, err)
+		assert.Equal(t, true, bytes.Equal(expectedSha256, actualSha256))
 	}
 }
 
