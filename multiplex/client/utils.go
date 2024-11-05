@@ -4,9 +4,13 @@ import (
 	"regexp"
 )
 
+const (
+	RegExpChainID = `(.*)\-([A-F0-9]+)\-([A-F0-9]+)`
+)
+
 // extractAddressFromChainID returns the user address extracted from a ChainID.
 func extractAddressFromChainID(chainId string) string {
-	extractor := regexp.MustCompile(`(.*)\-([A-F0-9]+)\-([A-F0-9]+)`)
+	extractor := regexp.MustCompile(RegExpChainID)
 	matches := extractor.FindStringSubmatch(chainId)
 
 	// Returns empty given non-compatible ChainID

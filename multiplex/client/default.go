@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 
+	abci "github.com/cometbft/cometbft/abci/types"
+	v1 "github.com/cometbft/cometbft/api/cometbft/types/v1"
 	"github.com/cometbft/cometbft/config"
 )
 
@@ -11,6 +13,23 @@ import (
 //
 // We hereby provide *example* implementations for the configuration extensions
 // that may be used to *inject configuration* from the client of this library.
+
+// Type-assertions ensure the compatibility of this implementation with the
+// multiplex client contract defined in this package.
+var _ SyncConfigExtensionFn = DefaultSyncConfigExtension
+var _ SeedConfigExtensionFn = DefaultSeedConfigExtension
+var _ ValidatorUpdateExtensionFn = DefaultValidatorUpdateExtension
+var _ ConsensusUpdateExtensionFn = DefaultConsensusUpdateExtension
+var _ SnapshotMutationExtensionFn = DefaultSnapshotMutationExtension
+var _ SnapshotRestoreExtensionFn = DefaultSnapshotRestoreExtension
+var _ CheckTxExtensionFn = DefaultCheckTxExtension
+var _ PrepareProposalExtensionFn = DefaultPrepareProposalExtension
+var _ ProcessProposalExtensionFn = DefaultProcessProposalExtension
+var _ FinalizeBlockExtensionFn = DefaultFinalizeBlockExtension
+var _ CommitExtensionFn = DefaultCommitExtension
+
+// ----------------------------------------------------------------------------
+// Configuration
 
 // DefaultSyncConfigExtension is an example implementation for the state-sync
 // config extension [SyncConfigExtensionFn]. A state-sync config extension may
@@ -24,7 +43,7 @@ import (
 // Note that we inject `Address` and `ChainID` in the Context before calling
 // the proposed extension callback, this example does not make use of these.
 func DefaultSyncConfigExtension(
-	ctx context.Context,
+	_ context.Context, // ctx
 	baseSyncConf *config.StateSyncConfig,
 ) *config.StateSyncConfig {
 	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
@@ -58,7 +77,7 @@ func DefaultSyncConfigExtension(
 // Note that we inject `Address` and `ChainID` in the Context before calling
 // the proposed extension callback, this example does not make use of these.
 func DefaultSeedConfigExtension(
-	ctx context.Context,
+	_ context.Context, // ctx
 	baseSeeds string,
 ) string {
 	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
@@ -70,6 +89,58 @@ func DefaultSeedConfigExtension(
 	return nextSeeds
 }
 
+// ----------------------------------------------------------------------------
+// Consensus
+
+// DefaultValidatorUpdateExtension is an example implementation for the
+// validator updates extension [ValidatorUpdateExtensionFn]. A custom auditing
+// and/or reporting unit may be used to evaluate the validator updates set.
+//
+// i.e. An extension may be implemented to report validator set updates to
+// a remove server, or to audit the validator updates.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultValidatorUpdateExtension(
+	_ context.Context, // ctx
+	validatorUpdates []abci.ValidatorUpdate, //nolint:unparam
+) error {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	// e.g. You may audit the validatorUpdates or report to a remote server.
+
+	return nil
+}
+
+// DefaultConsensusUpdateExtension is an example implementation for the
+// consensus updates extension [ConsensusUpdateExtensionFn]. A custom auditing
+// and/or reporting unit may be used to evaluate the consensus parameters.
+//
+// i.e. An extension may be implemented to report consensus parameters to
+// a remove server, or to audit the parameter updates.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultConsensusUpdateExtension(
+	_ context.Context, // ctx
+	consensusParams *v1.ConsensusParams, //nolint:unparam
+) error {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	// e.g. You may audit the consensusParams or report to a remote server.
+
+	return nil
+}
+
+// ----------------------------------------------------------------------------
+// Snapshots
+
 // DefaultSnapshotMutationExtension is an example implementation for the state
 // mutation extension [SnapshotMutationExtensionFn]. A state mutation extension
 // may be used to *process* or *mutate* state raw bytes for a particular network.
@@ -80,7 +151,7 @@ func DefaultSeedConfigExtension(
 // Note that we inject `Address` and `ChainID` in the Context before calling
 // the proposed extension callback, this example does not make use of these.
 func DefaultSnapshotMutationExtension(
-	ctx context.Context,
+	_ context.Context, // ctx
 	baseState []byte,
 ) []byte {
 	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
@@ -90,6 +161,58 @@ func DefaultSnapshotMutationExtension(
 
 	nextState := baseState[:]
 	return nextState
+}
+
+// DefaultSnapshotRestoreExtension is an example implementation for the state
+// restoration extension [SnapshotRestoreExtensionFn]. A state restoration
+// extension may be used to *process* restored state for a particular network.
+//
+// i.e. An extension may be implemented to store the restored state machine
+// bytes representation in a separate database instance.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultSnapshotRestoreExtension(
+	_ context.Context, // ctx
+	baseState []byte,
+) []byte {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	nextState := baseState[:]
+	return nextState
+}
+
+// ----------------------------------------------------------------------------
+// Transactions / Blocks
+
+// DefaultCheckTxExtension is an example implementation for the transactions
+// auditing extension [CheckTxExtensionFn]. A custom auditing and/or reporting
+// unit may be used to evaluate the transaction.
+//
+// CAUTION: Expensive operations must not be run here but rather in the
+// commitment stage(s) of the blocks proposal process.
+//
+// i.e. An extension may be implemented to report transaction bytes to
+// a remove server, or to audit the transaction before it is added.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultCheckTxExtension(
+	_ context.Context, // ctx
+	transactionBytes []byte, //nolint:unparam
+) error {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	// e.g. You may audit the transactionBytes.
+	// CAUTION: Expensive operations must not be run here.
+
+	return nil
 }
 
 // DefaultPrepareProposalExtension is an example implementation for the
@@ -103,11 +226,35 @@ func DefaultSnapshotMutationExtension(
 // Note that we inject `ChainID` in the Context before calling the proposed
 // extension callback, this example does not make use of it.
 func DefaultPrepareProposalExtension(
-	ctx context.Context,
+	_ context.Context, // ctx
 	baseTransactions [][]byte,
 ) [][]byte {
-	// e.g. You may interpret/use the ChainID in extensions.
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
 	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	nextTransactions := baseTransactions[:]
+	return nextTransactions
+}
+
+// DefaultProcessProposalExtension is an example implementation for the
+// transactions mutation extension [ProcessProposalExtensionFn]. A transactions
+// mutation extension may be used to *post-process* or *mutate* transactions
+// raw bytes as they are added to a proposal for a particular network.
+//
+// i.e. An extension may be implemented to store transaction data bytes
+// representation in a separate database instance.
+//
+// Note that we inject `ChainID` in the Context before calling the proposed
+// extension callback, this example does not make use of it.
+func DefaultProcessProposalExtension(
+	_ context.Context, // ctx
+	baseTransactions [][]byte,
+) [][]byte {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
 	// chainId := ctx.Value("ChainID").(string)
 
 	nextTransactions := baseTransactions[:]
@@ -125,13 +272,37 @@ func DefaultPrepareProposalExtension(
 // Note that we inject `ChainID` in the Context before calling the proposed
 // extension callback, this example does not make use of it.
 func DefaultFinalizeBlockExtension(
-	ctx context.Context,
+	_ context.Context, // ctx
 	baseTransactions [][]byte,
 ) [][]byte {
-	// e.g. You may interpret/use the ChainID in extensions.
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
 	//
+	// userAddress := ctx.Value("Address").(string)
 	// chainId := ctx.Value("ChainID").(string)
 
 	nextTransactions := baseTransactions[:]
 	return nextTransactions
+}
+
+// DefaultCommitExtension is an example implementation for the commited blocks
+// auditing extension [CommitExtensionFn]. A custom auditing and/or reporting
+// unit may be used to evaluate the commited block height.
+//
+// i.e. An extension may be implemented to report confirmed block heights to
+// a remove server, or to audit the commited block.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultCommitExtension(
+	_ context.Context, // ctx
+	blockHeight uint64, //nolint:unparam
+) error {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	// e.g. You may audit the blockHeight or report to a remote server.
+
+	return nil
 }

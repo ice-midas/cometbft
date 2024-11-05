@@ -34,66 +34,34 @@ func InjectSnapshotMutation(
 	return nextStateBytes
 }
 
-// InjectPrepareProposal defines a callback that returns a pre-processed slice
-// of transactions as they will be added to a block proposal.
+// InjectSnapshotRestore defines a callback that returns a restorable state
+// machine bytes representation (raw data).
 //
-// We provide an example [DefaultPrepareProposalExtension] implementation for the
-// extensionFn parameter which only copies the transaction bytes.
+// We provide an example [DefaultSnapshotRestoreExtension] implementation for the
+// extensionFn parameter which only copies the state machine instance.
 //
-// This method is called by [snapsapp.PrepareProposal] and may be used to
-// pre-process or discard transactions before they are added to a proposal.
+// This method is called by [multiplex.ChainStateStore] and may be used to
+// mutate state instances *before* they are restored to the state machine.
 //
-// Note that we inject `ChainID` in the Context before calling the proposed
-// extensionFn callback, you can use these in your extension as documented
-// with [DefaultPrepareProposalExtension].
-func InjectPrepareProposal(
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extensionFn callback, you can use these in your extension as
+// documented with [DefaultSnapshotRestoreExtension].
+func InjectSnapshotRestore(
 	chainId string,
-	transactionsData [][]byte,
-	extensionFn PrepareProposalExtensionFn,
-) [][]byte {
+	stateBytes []byte,
+	extensionFn SnapshotRestoreExtensionFn,
+) []byte {
 	// Injects Address and ChainID to the context in case it is
-	// necessary inside the [PrepareProposalExtensionFn] extension.
+	// necessary inside the [SnapshotRestoreExtensionFn] extension.
 	userAddress := extractAddressFromChainID(chainId)
 	chainContext := context.WithValue(context.TODO(), "Address", userAddress)
 	chainContext = context.WithValue(chainContext, "ChainID", chainId)
 
 	// CALLBACK: You may add custom per-user-chain source code here.
 	//
-	// e.g.: Sending the transactions slice to a custom remote server
-	// by implementing a custom PrepareProposalExtensionFn, an example is
-	// available with [DefaultPrepareProposalExtension].
-	nextTransactions := extensionFn(chainContext, transactionsData)
-	return nextTransactions
-}
-
-// InjectFinalizeBlock defines a callback that returns a post-processed slice
-// of transactions as they will be added to a finalized block.
-//
-// We provide an example [DefaultFinalizeBlockExtension] implementation for the
-// extensionFn parameter which only copies the transaction bytes.
-//
-// This method is called by [snapsapp.FinalizeBlock] and may be used to
-// post-process transactions as they are added to a finalized block and events.
-//
-// Note that we inject `ChainID` in the Context before calling the proposed
-// extensionFn callback, you can use these in your extension as documented
-// with [DefaultFinalizeBlockExtension].
-func InjectFinalizeBlock(
-	chainId string,
-	transactionsData [][]byte,
-	extensionFn FinalizeBlockExtensionFn,
-) [][]byte {
-	// Injects Address and ChainID to the context in case it is
-	// necessary inside the [FinalizeBlockExtensionFn] extension.
-	userAddress := extractAddressFromChainID(chainId)
-	chainContext := context.WithValue(context.TODO(), "Address", userAddress)
-	chainContext = context.WithValue(chainContext, "ChainID", chainId)
-
-	// CALLBACK: You may add custom per-user-chain source code here.
-	//
-	// e.g.: Sending the transactions slice to a custom remote server
-	// by implementing a custom FinalizeBlockExtensionFn, an example is
-	// available with [DefaultFinalizeBlockExtension].
-	nextTransactions := extensionFn(chainContext, transactionsData)
-	return nextTransactions
+	// e.g.: Sending the content of the state machine to a custom remote server
+	// by implementing a custom SnapshotRestoreExtensionFn, an example is
+	// available with [DefaultSnapshotRestoreExtension].
+	nextStateBytes := extensionFn(chainContext, stateBytes)
+	return nextStateBytes
 }
