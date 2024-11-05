@@ -13,6 +13,9 @@ import (
 	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
 )
 
+// ----------------------------------------------------------------------------
+// Network
+
 // InitChain initializes the application's state and sets up the initial
 // validator set and other consensus parameters.
 //
@@ -113,62 +116,14 @@ func (app *SnapsApp) Info(
 	}, nil
 }
 
-// CheckTx allows the application to validate transactions and/or discard them.
-//
-// This method may execute transactions in CheckTx mode, i.e. not actually
-// executing messages. Note also that expensive operations should not be run
-// here but rather in the commitment stage.
-//
-// TODO(midas): CheckTx not yet supported as of v1, all transactions are valid.
-// CheckTx implements [abcitypes.Application]
-func (app *SnapsApp) CheckTx(context.Context, *abcitypes.CheckTxRequest) (*abcitypes.CheckTxResponse, error) {
-	return &abcitypes.CheckTxResponse{Code: abcitypes.CodeTypeOK}, nil
-}
-
-// Commit may persist the application state if any data is relevant and it must
-// also determine whether a snapshot must be created, or not.
-//
-// This method is called after finalizing blocks. This method uses the snapshot
-// manager to determine whether a new snapshot must be taken or not, based on
-// the `interval` set in the [config.SnapshotOptions] instance for this chain.
-//
-// Commit implements [abcitypes.Application]
-func (app *SnapsApp) Commit(
-	ctx context.Context,
-	req *abcitypes.CommitRequest,
-) (*abcitypes.CommitResponse, error) {
-	// Retrieve ChainID from context
-	chainId := ctx.Value("ChainID").(string)
-
-	resp := &abcitypes.CommitResponse{
-		RetainHeight: 0, // pruning is disabled, so block retention 0.
-	}
-
-	// Make sure we handle only relevant commits
-	if !app.reactor.HasNetwork(chainId) {
-		app.logger.Error("received irrelevant snapshot chain identifier (Commit)", "chain_id", chainId)
-		return resp, nil
-	}
-
-	// Without snapshotter for this chain, we stop here
-	if _, ok := app.snapshotManagers[chainId]; !ok {
-		app.logger.Error("snapshot manager not configured (Info)", "chain_id", chainId)
-		return resp, nil
-	}
-
-	app.fbMutex.RLock()
-	workingHeight := app.finalizeBlockHeights[chainId]
-	app.fbMutex.RUnlock()
-
-	app.snapshotManagers[chainId].SnapshotIfApplicable(workingHeight)
-	return resp, nil
-}
-
 // TODO(midas): Query not yet supported as of v1
 // Query implements [abcitypes.Application]
 func (app *SnapsApp) Query(context.Context, *abcitypes.QueryRequest) (*abcitypes.QueryResponse, error) {
 	return &abcitypes.QueryResponse{Code: abcitypes.CodeTypeOK}, nil
 }
+
+// ----------------------------------------------------------------------------
+// Snapshots
 
 // ListSnapshots delegates to the correct snapshot manager to list recent
 // snapshots for the requested replicated chain.
@@ -389,6 +344,9 @@ func (app *SnapsApp) ApplySnapshotChunk(
 	}
 }
 
+// ----------------------------------------------------------------------------
+// Transactions / Blocks
+
 // PrepareProposal implements the PrepareProposal ABCI method and returns a
 // ResponsePrepareProposal object to the client. The PrepareProposal method is
 // responsible for allowing the block proposer to perform application-dependent
@@ -440,14 +398,16 @@ func (app *SnapsApp) PrepareProposal(
 }
 
 // ProcessProposal implements the ProcessProposal ABCI method and returns a
-// ResponseProcessProposal object to the client. The ProcessProposal method is
-// responsible for allowing execution of application-dependent work in a proposed
-// block. Note, the application defines the exact implementation details of
-// ProcessProposal. In general, the application must at the very least ensure
-// that all transactions are valid. If all transactions are valid, then we inform
-// CometBFT that the Status is ACCEPT. However, the application is also able
-// to implement optimizations such as executing the entire proposed block
-// immediately.
+// ResponseProcessProposal object to the client.
+//
+// The ProcessProposal method is responsible for allowing execution of
+// application-dependent work in a proposed block. Note, the application defines
+// the exact implementation details of ProcessProposal. In general, the
+// application must at the very least ensure that all transactions are valid.
+// If all transactions are valid, then we inform CometBFT that the Status is
+// ACCEPT.
+// However, the application is also able to implement optimizations such as
+// executing the entire proposed block immediately.
 //
 // If a panic is detected during execution of an application's ProcessProposal
 // handler, it will be recovered and we will reject the proposal.
@@ -479,37 +439,6 @@ func (app *SnapsApp) ProcessProposal(
 
 	// TODO(midas): add ProcessTransactions() callback for per-tx processing
 	return &abcitypes.ProcessProposalResponse{Status: abcitypes.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
-}
-
-// ExtendVote implements the ExtendVote ABCI method and returns a ResponseExtendVote.
-// It calls the application's ExtendVote handler which is responsible for performing
-// application-specific business logic when sending a pre-commit for the NEXT
-// block height. The extensions response may be non-deterministic but must always
-// be returned, even if empty.
-//
-// Agreed upon vote extensions are made available to the proposer of the next
-// height and are committed in the subsequent height, i.e. H+2. An error is
-// returned if vote extensions are not enabled or if extendVote fails or panics.
-//
-// ExtendVote implements [abcitypes.Application]
-func (app *SnapsApp) ExtendVote(context.Context, *abcitypes.ExtendVoteRequest) (*abcitypes.ExtendVoteResponse, error) {
-	return &abcitypes.ExtendVoteResponse{}, nil
-}
-
-// VerifyVoteExtension implements the VerifyVoteExtension ABCI method and returns
-// a ResponseVerifyVoteExtension. It calls the applications' VerifyVoteExtension
-// handler which is responsible for performing application-specific business
-// logic in verifying a vote extension from another validator during the pre-commit
-// phase. The response MUST be deterministic. An error is returned if vote
-// extensions are not enabled or if verifyVoteExt fails or panics.
-// We highly recommend a size validation due to performance degradation,
-// see more here https://docs.cometbft.com/v1.0/references/qa/cometbft-qa-38#vote-extensions-testbed
-//
-// VerifyVoteExtension implements [abcitypes.Application]
-func (app *SnapsApp) VerifyVoteExtension(context.Context, *abcitypes.VerifyVoteExtensionRequest) (*abcitypes.VerifyVoteExtensionResponse, error) {
-	return &abcitypes.VerifyVoteExtensionResponse{
-		Status: abcitypes.VERIFY_VOTE_EXTENSION_STATUS_ACCEPT,
-	}, nil
 }
 
 // FinalizeBlock will execute the block proposal provided by FinalizeBlockRequest.
@@ -569,5 +498,87 @@ func (app *SnapsApp) FinalizeBlock(
 
 	return &abcitypes.FinalizeBlockResponse{
 		TxResults: txResults,
+	}, nil
+}
+
+// CheckTx allows the application to validate transactions and/or discard them.
+//
+// This method may execute transactions in CheckTx mode, i.e. not actually
+// executing messages. Note also that expensive operations should not be run
+// here but rather in the commitment stage.
+//
+// TODO(midas): CheckTx not yet supported as of v1, all transactions are valid.
+// CheckTx implements [abcitypes.Application]
+func (app *SnapsApp) CheckTx(context.Context, *abcitypes.CheckTxRequest) (*abcitypes.CheckTxResponse, error) {
+	return &abcitypes.CheckTxResponse{Code: abcitypes.CodeTypeOK}, nil
+}
+
+// Commit may persist the application state if any data is relevant and it must
+// also determine whether a snapshot must be created, or not.
+//
+// This method is called after finalizing blocks. This method uses the snapshot
+// manager to determine whether a new snapshot must be taken or not, based on
+// the `interval` set in the [config.SnapshotOptions] instance for this chain.
+//
+// Commit implements [abcitypes.Application]
+func (app *SnapsApp) Commit(
+	ctx context.Context,
+	req *abcitypes.CommitRequest,
+) (*abcitypes.CommitResponse, error) {
+	// Retrieve ChainID from context
+	chainId := ctx.Value("ChainID").(string)
+
+	resp := &abcitypes.CommitResponse{
+		RetainHeight: 0, // pruning is disabled, so block retention 0.
+	}
+
+	// Make sure we handle only relevant commits
+	if !app.reactor.HasNetwork(chainId) {
+		app.logger.Error("received irrelevant snapshot chain identifier (Commit)", "chain_id", chainId)
+		return resp, nil
+	}
+
+	// Without snapshotter for this chain, we stop here
+	if _, ok := app.snapshotManagers[chainId]; !ok {
+		app.logger.Error("snapshot manager not configured (Info)", "chain_id", chainId)
+		return resp, nil
+	}
+
+	app.fbMutex.RLock()
+	workingHeight := app.finalizeBlockHeights[chainId]
+	app.fbMutex.RUnlock()
+
+	app.snapshotManagers[chainId].SnapshotIfApplicable(workingHeight)
+	return resp, nil
+}
+
+// ExtendVote implements the ExtendVote ABCI method and returns a ResponseExtendVote.
+// It calls the application's ExtendVote handler which is responsible for performing
+// application-specific business logic when sending a pre-commit for the NEXT
+// block height. The extensions response may be non-deterministic but must always
+// be returned, even if empty.
+//
+// Agreed upon vote extensions are made available to the proposer of the next
+// height and are committed in the subsequent height, i.e. H+2. An error is
+// returned if vote extensions are not enabled or if extendVote fails or panics.
+//
+// ExtendVote implements [abcitypes.Application]
+func (app *SnapsApp) ExtendVote(context.Context, *abcitypes.ExtendVoteRequest) (*abcitypes.ExtendVoteResponse, error) {
+	return &abcitypes.ExtendVoteResponse{}, nil
+}
+
+// VerifyVoteExtension implements the VerifyVoteExtension ABCI method and returns
+// a ResponseVerifyVoteExtension. It calls the applications' VerifyVoteExtension
+// handler which is responsible for performing application-specific business
+// logic in verifying a vote extension from another validator during the pre-commit
+// phase. The response MUST be deterministic. An error is returned if vote
+// extensions are not enabled or if verifyVoteExt fails or panics.
+// We highly recommend a size validation due to performance degradation,
+// see more here https://docs.cometbft.com/v1.0/references/qa/cometbft-qa-38#vote-extensions-testbed
+//
+// VerifyVoteExtension implements [abcitypes.Application]
+func (app *SnapsApp) VerifyVoteExtension(context.Context, *abcitypes.VerifyVoteExtensionRequest) (*abcitypes.VerifyVoteExtensionResponse, error) {
+	return &abcitypes.VerifyVoteExtensionResponse{
+		Status: abcitypes.VERIFY_VOTE_EXTENSION_STATUS_ACCEPT,
 	}, nil
 }

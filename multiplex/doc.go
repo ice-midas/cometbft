@@ -126,21 +126,33 @@ servers, or which stores data in a separate database, etc.
 
 ### Interfaces
 
-  - [client.SyncConfigExtensionFn]: Provides custom state-sync configuration values.
-  - [client.SeedConfigExtensionFn]: Provides custom seed nodes configuration values.
+  - [SyncConfigExtensionFn]: Provides custom state-sync configuration values.
+  - [SeedConfigExtensionFn]: Provides custom seed nodes configuration values.
+  - [ValidatorUpdateExtensionFn]: Provides custom auditing/reporting units for validator updates.
+  - [ConsensusUpdateExtensionFn]: Provides custom auditing/reporting units for consensus parameter updates.
   - [SnapshotMutationExtensionFn]: Provides custom processing units for snapshots data.
-  - [PrepareProposalExtensionFn]: Provides custom processing units for transactions data.
+  - [SnapshotRestoreExtensionFn]: Provides custom restoration units for snapshots data.
+  - [CheckTxExtensionFn]: Provides custom auditing/reporting units for transactions.
+  - [PrepareProposalExtensionFn]: Provides custom pre-processing units for transactions data.
+  - [ProcessProposalExtensionFn]: Provides custom post-processing units for transactions data.
   - [FinalizeBlockExtensionFn]: Provides custom processing units for blocks data.
+  - [CommitExtensionFn]: Provides custom auditing/reporting units for commited blocks.
 
 We provide several example implementations that basically just *deep-copy* the
 input. Obviously, if you are developing a custom extension, you would do more
 than just deep-copy input objects.
 
-An example for [client.SyncConfigExtensionFn] is: [client.DefaultSyncConfigExtension]
-An example for [client.SeedConfigExtensionFn] is: [client.DefaultSeedConfigExtension]
+An example for [SyncConfigExtensionFn] is: [DefaultSyncConfigExtension]
+An example for [SeedConfigExtensionFn] is: [DefaultSeedConfigExtension]
+An example for [ValidatorUpdateExtensionFn] is: [DefaultValidatorUpdateExtension]
+An example for [ConsensusUpdateExtensionFn] is: [DefaultConsensusUpdateExtension]
 An example for [SnapshotMutationExtensionFn] is: [DefaultSnapshotMutationExtension]
+An example for [SnapshotRestoreExtensionFn] is: [DefaultSnapshotRestoreExtension]
+An example for [CheckTxExtensionFn] is: [DefaultCheckTxExtension]
 An example for [PrepareProposalExtensionFn] is: [DefaultPrepareProposalExtension]
+An example for [ProcessProposalExtensionFn] is: [DefaultProcessProposalExtension]
 An example for [FinalizeBlockExtensionFn] is: [DefaultFinalizeBlockExtension]
+An example for [CommitExtensionFn] is: [DefaultCommitExtension]
 
 ## ChainRegistry
 
@@ -322,6 +334,18 @@ using one of the following commands:
 	go test github.com/cometbft/cometbft/multiplex/snapshots -run TestSnapshot.* -test.v
 	go test github.com/cometbft/cometbft/multiplex/snapsapp -run TestABCI.* -test.v
 	go test github.com/cometbft/cometbft/multiplex/client -run TestMultiplexClient.* -test.v
+
+# Runtime
+
+A more comprehensive *node setup guide* should be provided in a separate
+document. This section merely lists the *commands* that have been modified
+or added as part of this implementation.
+
+	# configuring a nodes multiplex (requires genesis.json)
+	go run ./cmd/cometbft/main.go init --home /tmp/cometbftmx --multiplex
+
+	# starting the nodes multiplex (requires genesis.json)
+	go run ./cmd/cometbft/main.go multiplex --home /tmp/cometbftmx
 
 # References
 

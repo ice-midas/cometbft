@@ -82,6 +82,8 @@ type genesisDocProviderFn func(string) *types.GenesisDoc
 // its channel `chainReadyCh` which contains a ChainID of the chain that is
 // being replicated. After this happened, the node is able to start syncing state
 // and/or blocks, as well as starting indexers, mempool, and other services.
+//
+// The [Reactor] structure implements [snapsapp.Reactor]
 type Reactor struct {
 	p2p.BaseReactor // BaseService + p2p.Switch
 

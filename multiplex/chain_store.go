@@ -36,7 +36,7 @@ var (
 // ChainStateStore
 //
 // ChainStateStore embeds a [sm.DBStore] pointer and adds a ChainID. This store
-// implementation is compatible with [snapshots.CommitSnapshotter] such that
+// implementation is compatible with [snapshots.StateSnapshotter] such that
 // the full state instance may be *restored* (state-sync) from snapshot files.
 //
 // Note that this structure embeds a [sm.DBStore] which provides methods for
