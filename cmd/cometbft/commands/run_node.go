@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -9,12 +10,21 @@ import (
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	kt "github.com/cometbft/cometbft/internal/keytypes"
 	cmtos "github.com/cometbft/cometbft/internal/os"
+	mx "github.com/cometbft/cometbft/multiplex"
 	nm "github.com/cometbft/cometbft/node"
 )
 
 var (
 	cliParams nm.CliParams
 	keyType   string
+
+	// Added flags for nodes multiplex:
+	// --multiplex: enables multiplex for init command
+	// --seeds-file: config-overwrite for seed nodes by chain
+	// --users-file: config-overwrite for user chains creation
+	enableMultiplex bool
+	seedsFile       string
+	usersFile       string
 )
 
 func genPrivKeyFromFlag() (crypto.PrivKey, error) {
@@ -90,6 +100,9 @@ func AddNodeFlags(cmd *cobra.Command) {
 		config.DBPath,
 		"database directory")
 	cmd.Flags().StringVarP(&keyType, "key-type", "k", ed25519.KeyType, fmt.Sprintf("private key type (one of %s)", kt.SupportedKeyTypesStr()))
+
+	// multiplex optional --seeds-file config overwrite
+	cmd.Flags().StringVarP(&seedsFile, "seeds-file", "", "", "path to a JSON file containing chain seeds mapped by ChainID.")
 }
 
 // NewRunNodeCmd returns the command that allows the CLI to start a node.
@@ -119,6 +132,122 @@ func NewRunNodeCmd(nodeProvider nm.Provider) *cobra.Command {
 					}
 				}
 			})
+
+			// Run forever.
+			select {}
+		},
+	}
+
+	AddNodeFlags(cmd)
+	return cmd
+}
+
+// NewRunMultiplexCmd returns the command that allows the CLI to start a nodes multiplex.
+// It can be used with a custom PrivValidator and always runs the *snapsapp* in-process
+// ABCI application- i.e. locally running an ABCI server.
+//
+// IMPORTANT:
+// The execution of the `init --multiplex` command is *required* before you
+// can run the `multiplex` command. The initialized `genesis.json` file will
+// be used to find out the *known networks* of a nodes multiplex.
+// Additionally, it is possible to provide a `--seeds-file` parameter to force
+// seed nodes configuration for a given ChainID. Note, the client extension
+// passed to [client.InjectSeedConfig] shall prevail and will provide the final
+// seed nodes configuration, as it is called with [mx.NewChainRegistry].
+//
+// IMPORTANT:
+// Note that this method spawns one goroutine per supported network.
+// The [nm.Node.Start] method is called in a parallel goroutine for every
+// replicated chain, and a [sync.WaitGroup] is used to *wait* for all nodes
+// to be up and running.
+// Additionally, we trap signals SIGTERM and SIGINT to gracefully terminate
+// the node process on exit.
+//
+// CAUTION - EXPERIMENTAL:
+// Running the following code is highly unrecommended in
+// a production environment. Please use this feature with
+// caution as it is still being actively developed.
+func NewRunMultiplexCmd(multiplexProvider mx.NodesMultiplexProvider) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "multiplex",
+		Aliases: []string{"nodes"},
+		Short:   "Run the CometBFT multiplex",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			// Read the genesis.json file to re-create the map of slices with
+			// ChainIDs by user addresses.
+			userChains, err := mx.LoadChainsFromGenesisFile(config.GenesisFile())
+			if err != nil {
+				return fmt.Errorf("failed to load multiplex config: %w", err)
+			}
+
+			// Parse a --seeds-file option to force some chain seeds by config.
+			// Note that client extensions prevail and overrule chain seeds config.
+			// See also: client.InjectSeedConfig()
+			chainSeeds := map[string]string{}
+			if len(seedsFile) > 0 && cmtos.FileExists(seedsFile) {
+				chainSeeds, err = mx.LoadSeedsFromFile(seedsFile)
+				if err != nil {
+					return fmt.Errorf("failed to load seeds config: %w", err)
+				}
+			}
+
+			// Overwrite the UserChains but keep prepared rootDir
+			rootDir := config.RootDir
+			config.Strategy = mx.NetworkReplicationStrategy()
+			config.ChainSeeds = chainSeeds
+			config.UserChains = userChains
+			config.SetRoot(rootDir)
+
+			// Create the MultiplexMap of *node.Node instances
+			nodesMultiplex, err := multiplexProvider(config, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create multiplex: %w", err)
+			}
+
+			wg := sync.WaitGroup{}
+			wg.Add(len(nodesMultiplex))
+
+			for nodeChainId, nodeInstance := range nodesMultiplex {
+				// Type-assertion makes sure we have a [*nm.Node]
+				runNode := nodeInstance.GetInstance().(*nm.Node)
+
+				// Here, we create one goroutine per replicated chain and each starts a
+				// CometBFT node instance from the [MultiplexMap]. Additionally, we trap
+				// SIGTERM and SIGINT to gracefully terminate the node process on exit.
+				//
+				// CAUTION - EXPERIMENTAL:
+				// Running the following code is highly unrecommended in
+				// a production environment. Please use this feature with
+				// caution as it is still being actively developed.
+				go func(chainId string, sn *nm.Node) {
+					defer wg.Done()
+
+					logger.Info("Starting new node", "chain", chainId)
+					logger.Info("Using custom listen addresses",
+						"p2p", sn.Config().P2P.ListenAddress,
+						"rpc", sn.Config().RPC.ListenAddress,
+					)
+
+					if err := sn.Start(); err != nil {
+						panic(fmt.Errorf("failed to start node: %w", err))
+					}
+
+					logger.Info("Started node", "chain", chainId, "nodeInfo", sn.Switch().NodeInfo())
+
+					// Stop upon receiving SIGTERM or CTRL-C.
+					cmtos.TrapSignal(logger, func() {
+						if sn.IsRunning() {
+							if err := sn.Stop(); err != nil {
+								logger.Error("unable to stop the node", "error", err)
+							}
+						}
+					})
+				}(nodeChainId, runNode)
+			}
+
+			// Wait for all nodes to be up and running
+			logger.Info("Waiting for nodes to be up and running.", "count", len(nodesMultiplex))
+			wg.Wait()
 
 			// Run forever.
 			select {}

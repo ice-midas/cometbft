@@ -26,6 +26,41 @@ import (
 	"github.com/cometbft/cometbft/multiplex/snapsapp"
 )
 
+// NodesMultiplexProvider takes a config and a logger and returns a
+// ready-to-go nodes multiplex, i.e. [mx.MultiplexMap[*node.Node]].
+//
+// Note that providers *must not* start node instance
+type NodesMultiplexProvider func(
+	*config.Config,
+	cmtlog.Logger,
+	...node.Option,
+) (MultiplexMap[*node.Node], error)
+
+// DefaultNewNodesMultiplex returns a CometBFT Nodes Multiplex with default
+// settings for the PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
+//
+// This method is used in `cmd/cometbft/main.go` to create a nodes multiplex.
+//
+// See also: [NewNodesMultiplex]
+// This method implements [NodesMultiplexProvider]
+func DefaultNewNodesMultiplex(
+	globalCfg *config.Config,
+	logger cmtlog.Logger,
+	options ...node.Option,
+) (MultiplexMap[*node.Node], error) {
+	nodesMultiplex, _, err := NewNodesMultiplex(
+		context.Background(),
+		globalCfg,
+		logger,
+		options...,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return nodesMultiplex, nil
+}
+
 // ----------------------------------------------------------------------------
 // NewNodesMultiplex
 
@@ -75,7 +110,7 @@ func NewNodesMultiplex(
 	// Uses a singleton chain registry to interpret multiplex configurations
 	chainRegistry, err := NewChainRegistry(&globalCfg.MultiplexConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load or gen node key %s: %w", globalCfg.NodeKeyFile(), err)
+		return nil, nil, fmt.Errorf("failed to create the ChainRegistry: %w", err)
 	}
 
 	// Initialize a multiplex reactor which handles the configuration

@@ -159,3 +159,8 @@ func NewExtendedChainIDFromLegacy(chainId string) (ExtendedChainID, error) {
 
 	return NewExtendedChainID(matches[2], matches[3])
 }
+
+// GetMultitplexPrefix returns the value for constant multiplexPrefix.
+func GetMultiplexPrefix() string {
+	return multiplexPrefix
+}
