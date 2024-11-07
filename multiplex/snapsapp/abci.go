@@ -358,6 +358,16 @@ func (app *SnapsApp) ApplySnapshotChunk(
 // transactions to return based on the mempool's semantics and the MaxTxBytes
 // provided by the client's request.
 //
+// CAUTION:
+// This method executes the [client.PrepareProposalExtensionFn] and catches
+// potential panics from the extension's runtime. Importantly, in case of a
+// failing PrepareProposal extension, **blocks proposals cannot be created**.
+// This is notably to ensure that important client mutations and/or reports
+// are *always* prioritized and that data is hereby consistently originating
+// or audited/reported from the client (extension/hook) implementation.
+// Note, the default (example) implementation for the PrepareProposal extension
+// returns a deep-copy of the original request's transaction bytes.
+//
 // PrepareProposal implements [abcitypes.Application]
 func (app *SnapsApp) PrepareProposal(
 	ctx context.Context,
@@ -385,13 +395,21 @@ func (app *SnapsApp) PrepareProposal(
 		txs = append(txs, tx)
 	}
 
-	// Uses the default extension implementation, i.e. deep-copy the transactions
-	// see `snapsapp/client.go` to use a custom transactions mutation extension.
-	preparedTxes := client.InjectPrepareProposal(
-		chainId,
-		txs,
-		GetPrepareProposalExtension(),
-	)
+	// Prepare the contract for PrepareProposal extensions
+	var preparedTxes [][]byte
+
+	// Executes prepare proposal extension and catches potential panics to ensure
+	// data consistency, also making a compromise on availability.
+	//
+	// Catch recovered errors from prepare proposal extension and stop.
+	// When a prepare proposal extension fails, the block proposal cannot be
+	// created because the extension determines the filtering of transactions
+	// in prepared blocks proposals.
+	preparedTxes, err := app.runPrepareProposalExtension(chainId, txs)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"CLIENT PANIC: failing prepare proposal extension: %w", err)
+	}
 
 	// TODO(midas): add PrepareTransactions() callback for per-tx mutations/storage
 	return &abcitypes.PrepareProposalResponse{Txs: preparedTxes}, nil
@@ -411,6 +429,13 @@ func (app *SnapsApp) PrepareProposal(
 //
 // If a panic is detected during execution of an application's ProcessProposal
 // handler, it will be recovered and we will reject the proposal.
+//
+// CAUTION:
+// This method executes the [client.ProcessProposalExtensionFn] and catches
+// potential panics from the extension's runtime. Importantly, in case of a
+// failing ProcessProposal extension, this method returns ACCEPT.
+// Note, the default (example) implementation for the ProcessProposal extension
+// returns a deep-copy of the original request's transaction bytes.
 //
 // ProcessProposal implements [abcitypes.Application]
 func (app *SnapsApp) ProcessProposal(
@@ -437,7 +462,17 @@ func (app *SnapsApp) ProcessProposal(
 	app.currentHeights[chainId] = req.Height
 	app.chMutex.Unlock()
 
-	// TODO(midas): add ProcessTransactions() callback for per-tx processing
+	// Executes process proposal extension and catches potential panics to
+	// ensure that any errors *do not* influence the processing stage.
+	//
+	// The reason for this is that the data written in a *processed* blocks
+	// proposal cannot be modified from here, and must be done in PrepareProposal.
+	_, err := app.runProcessProposalExtension(chainId, req.Txs)
+	if err != nil {
+		app.logger.Error("CLIENT PANIC: failing process proposal extension:", "err", err.Error())
+		// Proceed with processing stage!
+	}
+
 	return &abcitypes.ProcessProposalResponse{Status: abcitypes.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
 }
 
@@ -450,6 +485,16 @@ func (app *SnapsApp) ProcessProposal(
 // subsequent Commit() ABCI with the same ChainID may know which *height* is
 // being finalized. This height is used to determine whether a snapshot must
 // be taken or not.
+//
+// CAUTION:
+// This method executes the [client.FinalizeBlockExtensionFn] and catches
+// potential panics from the extension's runtime. Importantly, in case of a
+// failing FinalizeBlock extension, **blocks cannot be finalized**.
+// This is notably to ensure that important client mutations and/or reports
+// are *always* prioritized and that data is hereby consistently originating
+// or audited/reported from the client (extension/hook) implementation.
+// Note, the default (example) implementation for the FinalizeBlock extension
+// returns a deep-copy of the original request's transaction bytes.
 //
 // FinalizeBlock implements [abcitypes.Application]
 func (app *SnapsApp) FinalizeBlock(
@@ -466,13 +511,20 @@ func (app *SnapsApp) FinalizeBlock(
 		return resp, fmt.Errorf("invalid chain-id on FinalizeBlock: %s is not replicated", chainId)
 	}
 
-	// Uses the default extension implementation, i.e. deep-copy the transactions
-	// see `snapsapp/client.go` to use a custom transactions mutation extension.
-	processedTxs := client.InjectFinalizeBlock(
-		chainId,
-		req.Txs,
-		GetFinalizeBlockExtension(),
-	)
+	// Prepare the contract for FinalizeBlock extensions
+	var processedTxs [][]byte
+
+	// Executes finalize block extension and catches potential panics to ensure
+	// data consistency, also making a compromise on availability.
+	//
+	// Catch recovered errors from finalize block extension and stop.
+	// When a finalize block extension fails, the block cannot be finalized
+	// because the extension determines the filtering of transactions in blocks.
+	processedTxs, err := app.runFinalizeBlockExtension(chainId, req.Txs)
+	if err != nil {
+		return resp, fmt.Errorf(
+			"CLIENT PANIC: failing finalize block extension: %w", err)
+	}
 
 	// Whenever there is transactions that are included in a *finalized*
 	// block, we create an [abcitypes.Event] which contains the transaction
@@ -507,10 +559,40 @@ func (app *SnapsApp) FinalizeBlock(
 // executing messages. Note also that expensive operations should not be run
 // here but rather in the commitment stage.
 //
-// TODO(midas): CheckTx not yet supported as of v1, all transactions are valid.
+// CAUTION:
+// We use [client.DelegateCheckTx] to delegate the CheckTx call to a potential
+// extension. It is important to note that if the extension fails, the returned
+// response [abcitype.CheckTxResponse] will contain an error code and the
+// transaction **will not be accepted**.
+// Note, the default (example) implementation for the CheckTx extension
+// always returns nil, such that **all transactions are valid**.
+//
 // CheckTx implements [abcitypes.Application]
-func (app *SnapsApp) CheckTx(context.Context, *abcitypes.CheckTxRequest) (*abcitypes.CheckTxResponse, error) {
-	return &abcitypes.CheckTxResponse{Code: abcitypes.CodeTypeOK}, nil
+func (app *SnapsApp) CheckTx(
+	ctx context.Context,
+	req *abcitypes.CheckTxRequest,
+) (*abcitypes.CheckTxResponse, error) {
+	// Retrieve ChainID from context
+	chainId := ctx.Value("ChainID").(string)
+
+	// Prepare the contract for CheckTx extensions
+	var err error
+
+	// Executes commit extension and catches potential panics to ensure
+	// data consistency. If the extension returns an error or fails,
+	// the transaction will be considered *invalid*.
+	//
+	// When a commit extension fails, the response [abcitype.CheckTxResponse]
+	// will contain an error code and the transaction **will not be accepted**.
+	err = app.runCheckTxExtension(chainId, req.Tx)
+
+	// If the extension returns an error, we do not accept this transaction.
+	if err != nil {
+		return &abcitypes.CheckTxResponse{Code: CodeTypeErr_CheckTx_Failure}, err
+	}
+
+	// If the extensions returns nil, we accept the transaction.
+	return &abcitypes.CheckTxResponse{Code: abcitypes.CodeTypeOK}, err
 }
 
 // Commit may persist the application state if any data is relevant and it must
@@ -519,6 +601,14 @@ func (app *SnapsApp) CheckTx(context.Context, *abcitypes.CheckTxRequest) (*abcit
 // This method is called after finalizing blocks. This method uses the snapshot
 // manager to determine whether a new snapshot must be taken or not, based on
 // the `interval` set in the [config.SnapshotOptions] instance for this chain.
+//
+// CAUTION:
+// We use [client.ReportCommit] to enable auditing or reporting about committed
+// blocks from a potential extension. It is important to note that if the
+// extension fails, the commitment stage is *unaffected*, i.e. an error in
+// auditing or reporting units *does not* affect commitment stage(s).
+// Note, the default (example) implementation for the Commit extension
+// always returns nil, such that **all committed blocks are accepted**.
 //
 // Commit implements [abcitypes.Application]
 func (app *SnapsApp) Commit(
@@ -540,13 +630,27 @@ func (app *SnapsApp) Commit(
 
 	// Without snapshotter for this chain, we stop here
 	if _, ok := app.snapshotManagers[chainId]; !ok {
-		app.logger.Error("snapshot manager not configured (Info)", "chain_id", chainId)
+		app.logger.Error("snapshot manager not configured (Commit)", "chain_id", chainId)
 		return resp, nil
 	}
 
 	app.fbMutex.RLock()
 	workingHeight := app.finalizeBlockHeights[chainId]
 	app.fbMutex.RUnlock()
+
+	// Prepare the contract for Commit extensions
+	var errCommitHook error
+
+	// Executes commit extension and catches potential panics to ensure that
+	// any errors *do not* influence the commitment stage.
+	//
+	// The reason for this is that the data written in a *committed* blocks
+	// cannot be modified from here and the response is always RetainHeight=0.
+	errCommitHook = app.runCommitExtension(chainId, uint64(workingHeight))
+	if errCommitHook != nil {
+		app.logger.Error("CLIENT PANIC: failing commit extension:", "err", errCommitHook.Error())
+		// Proceed with commitment stage!
+	}
 
 	app.snapshotManagers[chainId].SnapshotIfApplicable(workingHeight)
 	return resp, nil
@@ -581,4 +685,292 @@ func (app *SnapsApp) VerifyVoteExtension(context.Context, *abcitypes.VerifyVoteE
 	return &abcitypes.VerifyVoteExtensionResponse{
 		Status: abcitypes.VERIFY_VOTE_EXTENSION_STATUS_ACCEPT,
 	}, nil
+}
+
+// ----------------------------------------------------------------------------
+// Extensions / Hooks
+
+// runCheckTxExtension executes a checktx extension. This method
+// uses the checkTxExtension on the instance if available, or otherwise
+// it uses the extension configured as the *default*.
+//
+// Executes checktx extension and catches potential panics to ensure
+// data consistency, also making a compromise on availability.
+// When a checktx extension fails, the transaction won't be accepted.
+//
+// See also: [GetCheckTxExtension], [WithCheckTxExtension].
+func (app *SnapsApp) runCheckTxExtension(
+	chainId string,
+	transaction []byte,
+) error {
+	// Prepare the contract for CheckTx extensions
+	var checkTxHook client.CheckTxExtensionFn
+
+	// Uses the default extension or the one configured
+	checkTxHook = GetCheckTxExtension()
+	if app.checkTxExtension != nil {
+		checkTxHook = app.checkTxExtension
+	}
+
+	// Executes checktx extension and catches potential panics to ensure
+	// data consistency, also making a compromise on availability.
+	//
+	// When a checktx extension fails, the transaction won't be accepted.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a checktx extension. This recovery ensures *data consistency*
+		// in case of failing checktx extensions, and thus breaks the
+		// transaction verification process until the checktx extension is fine.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in prepare proposal extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. all transactions valid
+		// see `snapsapp/client.go` to use a custom transactions auditing extension.
+		// See also [WithCheckTxExtension].
+		err = client.DelegateCheckTx(
+			chainId,
+			transaction,
+			checkTxHook,
+		)
+		return err
+	}()
+
+	return err
+}
+
+// runPrepareProposalExtension executes a prepare proposal extension. This method
+// uses the prepareProposalExtension on the instance if available, or otherwise
+// it uses the extension configured as the *default*.
+//
+// Executes prepare proposal extension and catches potential panics to ensure
+// data consistency, also making a compromise on availability.
+// When a prepare proposal extension fails, the block proposal cannot be
+// created because the extension determines the filtering of transactions
+// in prepared blocks proposals.
+//
+// See also: [GetPrepareProposalExtension], [WithPrepareProposalExtension].
+func (app *SnapsApp) runPrepareProposalExtension(
+	chainId string,
+	transactions [][]byte,
+) ([][]byte, error) {
+	// Prepare the contract for finalize block extensions
+	var mutatedTransactions [][]byte
+	var prepareProposalHook client.PrepareProposalExtensionFn
+
+	// Uses the default extension or the one configured
+	prepareProposalHook = GetPrepareProposalExtension()
+	if app.prepareProposalExtension != nil {
+		prepareProposalHook = app.prepareProposalExtension
+	}
+
+	// Executes prepare proposal extension and catches potential panics to ensure
+	// data consistency, also making a compromise on availability.
+	//
+	// When a prepare proposal extension fails, the block proposal cannot be
+	// created because the extension determines the filtering of transactions.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a prepare proposal extension. This recovery ensures *data consistency*
+		// in case of failing prepare proposal extensions, and thus breaks the
+		// blocks proposal process until the prepare proposal extension is fine.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in prepare proposal extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. return nil (no-error)
+		// See `multiplex/client.go` to use a custom prepare proposal extension.
+		// See also [WithPrepareProposalExtension].
+		mutatedTransactions = client.InjectPrepareProposal(
+			chainId,
+			transactions,
+			prepareProposalHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from prepare proposal extension and stop.
+	// When a prepare proposal extension fails, the block proposal cannot be
+	// created because the extension determines the filtering of transactions.
+	if err != nil {
+		return [][]byte{}, err
+	}
+
+	// No errors happened, we can safely use the mutated transaction bytes
+	return mutatedTransactions, nil
+}
+
+// runProcessProposalExtension executes a process proposal extension. This method
+// uses the processProposalExtension on the instance if available, or otherwise
+// it uses the extension configured as the *default*.
+//
+// Executes process proposal extension and catches potential panics to ensure
+// that failing extensions do not influence the processing stage.
+// i.e. Failing extensions do not affect the acceptance of a block proposal.
+//
+// See also: [GetProcessProposalExtension], [WithProcessProposalExtension].
+func (app *SnapsApp) runProcessProposalExtension(
+	chainId string,
+	transactions [][]byte,
+) ([][]byte, error) {
+	// Prepare the contract for finalize block extensions
+	var mutatedTransactions [][]byte
+	var processProposalHook client.ProcessProposalExtensionFn
+
+	// Uses the default extension or the one configured
+	processProposalHook = GetProcessProposalExtension()
+	if app.processProposalExtension != nil {
+		processProposalHook = app.processProposalExtension
+	}
+
+	// Executes process proposal extension and catches potential panics to ensure
+	// that failing extensions do not influence the processing stage.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a process proposal extension.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in process proposal extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. return nil (no-error)
+		// See `multiplex/client.go` to use a custom process proposal extension.
+		// See also [WithProcessProposalExtension].
+		mutatedTransactions = client.InjectProcessProposal(
+			chainId,
+			transactions,
+			processProposalHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from process proposal extension.
+	if err != nil {
+		return [][]byte{}, err
+	}
+
+	// No errors happened, we can safely use the mutated transactions bytes slices
+	return mutatedTransactions, nil
+}
+
+// runFinalizeBlockExtension executes a finalize block extension. This method
+// uses the finalizeBlockExtension on the instance if available, or otherwise
+// it uses the extension configured as the *default*.
+//
+// Executes finalize block extension and catches potential panics to ensure
+// data consistency, also making a compromise on availability.
+// When a finalize block extension fails, the block cannot be finalized
+// because the extension determines the filtering of transactions in blocks.
+//
+// See also: [GetFinalizeBlockExtension], [WithFinalizeBlockExtension].
+func (app *SnapsApp) runFinalizeBlockExtension(
+	chainId string,
+	transactions [][]byte,
+) ([][]byte, error) {
+	// Prepare the contract for finalize block extensions
+	var mutatedTransactions [][]byte
+	var finalizeBlockHook client.FinalizeBlockExtensionFn
+
+	// Uses the default extension or the one configured
+	finalizeBlockHook = GetFinalizeBlockExtension()
+	if app.finalizeBlockExtension != nil {
+		finalizeBlockHook = app.finalizeBlockExtension
+	}
+
+	// Executes finalize block extension and catches potential panics to ensure
+	// data consistency, also making a compromise on availability.
+	//
+	// When a finalize block extension fails, the block cannot be finalized
+	// because the extension determines the filtering of transactions in blocks.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a finalize block extension. This recovery ensures *data consistency*
+		// in case of failing finalize block extensions, and thus breaks the
+		// blocks finalizing process until the finalize block extension is fine.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in finalize block extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. return nil (no-error)
+		// See `multiplex/client.go` to use a custom finalize block extension.
+		// See also [WithFinalizeBlockExtension].
+		mutatedTransactions = client.InjectFinalizeBlock(
+			chainId,
+			transactions,
+			finalizeBlockHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from finalize block extension and stop.
+	// When a finalize block extension fails, the block cannot be finalized
+	// because the extension determines the filtering of transactions in blocks.
+	if err != nil {
+		return [][]byte{}, err
+	}
+
+	// No errors happened, we can safely use the mutated transaction bytes
+	return mutatedTransactions, nil
+}
+
+// runCommitExtension executes a commit extension. This method uses the
+// commitExtension on the instance if available, or otherwise it uses the
+// extension configured as the *default*.
+//
+// Executes commit extension and catches potential panics to ensure that
+// any errors *do not* influence the commitment stage.
+//
+// See also: [GetCommitExtension], [WithCommitExtension].
+func (app *SnapsApp) runCommitExtension(chainId string, committedHeight uint64) error {
+	// Prepare the contract for commit extensions
+	var commitHook client.CommitExtensionFn
+
+	// Uses the default extension or the one configured
+	commitHook = GetCommitExtension()
+	if app.commitExtension != nil {
+		commitHook = app.commitExtension
+	}
+
+	// Executes commit extension and catches potential panics to ensure that
+	// any errors *do not* influence the commitment stage.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a commit extension. This recovery ensures that the reporting of commit
+		// does not influence the actual commitment stage.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in commit extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. return nil (no-error)
+		// See `multiplex/client.go` to use a custom commit extension.
+		// See also [WithCommitExtension].
+		err = client.ReportCommit(
+			chainId,
+			committedHeight,
+			commitHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from commit extension and return error.
+	// When a commit extension fails, it should not affect the commitment stage.
+	return err
 }

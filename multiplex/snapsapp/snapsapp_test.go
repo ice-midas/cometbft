@@ -73,8 +73,13 @@ func NewSnapsAppSuite(t *testing.T, opts ...func(*snapsapp.SnapsApp)) *SnapsAppS
 
 	rootDir, _, testReactor := prepareMultiplexReactor(t)
 
-	logger := cmtlog.NewNopLogger()
-	app := snapsapp.NewSnapsApplication(testReactor, config.NewSnapshotOptions(1, 1, 1), logger)
+	logger := cmtlog.NewNopLogger() // for debug change to TestingLogger()
+	app := snapsapp.NewSnapsApplication(
+		testReactor,
+		config.NewSnapshotOptions(1, 1, 1),
+		logger,
+		opts...,
+	)
 
 	return &SnapsAppSuite{
 		snapsApp: app,

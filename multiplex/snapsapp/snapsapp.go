@@ -9,6 +9,7 @@ import (
 	"github.com/cometbft/cometbft/config"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 
+	"github.com/cometbft/cometbft/multiplex/client"
 	"github.com/cometbft/cometbft/multiplex/snapshots"
 )
 
@@ -59,6 +60,13 @@ type SnapsApp struct {
 	// The finalized block heights consist of working block heights.
 	fbMutex              *sync.RWMutex
 	finalizeBlockHeights map[string]int64
+
+	// Extensions / Hooks
+	checkTxExtension         client.CheckTxExtensionFn
+	prepareProposalExtension client.PrepareProposalExtensionFn
+	processProposalExtension client.ProcessProposalExtensionFn
+	finalizeBlockExtension   client.FinalizeBlockExtensionFn
+	commitExtension          client.CommitExtensionFn
 }
 
 var _ abcitypes.Application = (*SnapsApp)(nil)
@@ -167,4 +175,57 @@ func (app *SnapsApp) setFinalizeBlockHeight(chainId string, reqHeight int64) err
 
 	app.finalizeBlockHeights[chainId] = reqHeight
 	return nil
+}
+
+// ----------------------------------------------------------------------------
+// SnapsApp option helpers
+
+// WithCheckTxExtension is an option helper that allows you to
+// overwrite the default (nil-returning) CheckTx extension.
+func WithCheckTxExtension(
+	extensionFn client.CheckTxExtensionFn,
+) func(*SnapsApp) {
+	return func(app *SnapsApp) {
+		app.checkTxExtension = extensionFn
+	}
+}
+
+// WithPrepareProposalExtension is an option helper that allows you to
+// overwrite the default (deep-copying) PrepareProposal extension.
+func WithPrepareProposalExtension(
+	extensionFn client.PrepareProposalExtensionFn,
+) func(*SnapsApp) {
+	return func(app *SnapsApp) {
+		app.prepareProposalExtension = extensionFn
+	}
+}
+
+// WithProcessProposalExtension is an option helper that allows you to
+// overwrite the default (deep-copying) ProcessProposal extension.
+func WithProcessProposalExtension(
+	extensionFn client.ProcessProposalExtensionFn,
+) func(*SnapsApp) {
+	return func(app *SnapsApp) {
+		app.processProposalExtension = extensionFn
+	}
+}
+
+// WithFinalizeBlockExtension is an option helper that allows you to
+// overwrite the default (deep-copying) FinalizeBlock extension.
+func WithFinalizeBlockExtension(
+	extensionFn client.FinalizeBlockExtensionFn,
+) func(*SnapsApp) {
+	return func(app *SnapsApp) {
+		app.finalizeBlockExtension = extensionFn
+	}
+}
+
+// WithCommitExtension is an option helper that allows you to
+// overwrite the default (nil-returning) Commit extension.
+func WithCommitExtension(
+	extensionFn client.CommitExtensionFn,
+) func(*SnapsApp) {
+	return func(app *SnapsApp) {
+		app.commitExtension = extensionFn
+	}
 }

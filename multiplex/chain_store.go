@@ -48,6 +48,10 @@ type ChainStateStore struct {
 
 	// Used for user address discovery by ChainID
 	chainRegistry ChainRegistry
+
+	// Extensions / Hooks
+	snapshotMutationHook client.SnapshotMutationExtensionFn
+	snapshotRestoreHook  client.SnapshotRestoreExtensionFn
 }
 
 // MultiplexChainStore maps ChainIDs to state store instances
@@ -217,13 +221,24 @@ func (store ChainStateStore) Snapshot(
 		return fmt.Errorf("cannot snapshot future height %v", height)
 	}
 
-	// Uses the default extension implementation, i.e. deep-copy the sm.State
-	// see `multiplex/client.go` to use a custom state mutation extension.
-	stateBytes := client.InjectSnapshotMutation(
-		store.GetChainID(),
-		latestState.Bytes(),
-		GetSnapshotMutationExtension(),
-	)
+	// Prepare the contract for state mutation extensions
+	var mutatedStateBytes []byte
+
+	// Executes snapshot mutation extension and catches potential panics to
+	// ensure data consistency, also making a compromise on availability.
+	//
+	// Catch recovered errors from snapshot mutation extension and stop.
+	// When a snapshot mutation extension fails, the data cannot be snapshotted
+	// because the extension determines the format of the mutated state machine.
+	mutatedStateBytes, err = store.runSnapshotMutationHook(latestState)
+	if err != nil {
+		return fmt.Errorf(
+			"CLIENT PANIC: failing snapshot mutation extension: %w", err)
+	}
+
+	// Reaching the following block means that the snapshot mutation extension
+	// mutated the snapshot state correctly and that no errors happened during
+	// the mutation process.
 
 	// State is serialized as a stream of SnapshotItem Protobuf
 	// messages which contain a bytes payload of the state store.
@@ -232,7 +247,7 @@ func (store ChainStateStore) Snapshot(
 		err = protoWriter.WriteMsg(&snapshottypes.SnapshotItem{
 			Item: &snapshottypes.SnapshotItem_Store{
 				Store: &snapshottypes.SnapshotStoreItem{
-					Payload: stateBytes,
+					Payload: mutatedStateBytes,
 				},
 			},
 		})
@@ -261,7 +276,7 @@ func (store ChainStateStore) Restore(
 ) (snapshottypes.SnapshotItem, error) {
 	// We restore as many items as there are for a specific snapshot
 	var snapshotItem snapshottypes.SnapshotItem
-	var stateBytes []byte
+	var restoredStateBytes []byte
 
 	// Reads the next snapshot item until it finds EOF or an error occurs
 RESTORE_LOOP:
@@ -278,15 +293,15 @@ RESTORE_LOOP:
 
 		switch item := snapshotItem.Item.(type) {
 		case *snapshottypes.SnapshotItem_Store:
-			stateBytes = item.Store.Payload
-			if stateBytes == nil || len(stateBytes) == 0 {
+			restoredStateBytes = item.Store.Payload
+			if restoredStateBytes == nil || len(restoredStateBytes) == 0 {
 				return snapshottypes.SnapshotItem{}, errors.New("found empty snapshot item payload")
 			}
 
 			// store.logger.Debug("restoring snapshot",
 			// 	"chain_id", store.ChainID,
 			// 	"height", height,
-			// 	"size", len(stateBytes),
+			// 	"size", len(restoredStateBytes),
 			// )
 
 		default:
@@ -294,20 +309,179 @@ RESTORE_LOOP:
 		}
 	}
 
-	if stateBytes != nil {
-		// Create a [sm.State] instance from snapshot item data
-		newState, err := store.loadStateFromPayload(stateBytes)
+	if restoredStateBytes != nil {
+		// Executes snapshot restoration extension and catches potential panics to
+		// ensure data consistency, also making a compromise on availability.
+		//
+		// Catch recovered errors from snapshot restore extension and stop.
+		// When a snapshot restore extension fails, the data cannot be restored
+		// because the extension determines the format of the mutated state machine.
+		restoredStateBytes, err := store.runSnapshotRestoreHook(restoredStateBytes)
 		if err != nil {
-			return snapshottypes.SnapshotItem{}, fmt.Errorf("could not load snapshot data: %w", err)
+			return snapshottypes.SnapshotItem{}, fmt.Errorf(
+				"CLIENT PANIC: failing snapshot restoration extension: %w", err)
+		}
+
+		// Create a [sm.State] instance from snapshot item data
+		newState, err := store.loadStateFromPayload(restoredStateBytes)
+		if err != nil {
+			return snapshottypes.SnapshotItem{}, fmt.Errorf(
+				"could not load snapshot data: %w", err)
 		}
 
 		// Commit the restoration process, this updates the database
 		if err = store.Commit(newState); err != nil {
-			return snapshottypes.SnapshotItem{}, fmt.Errorf("could not commit restored state: %w", err)
+			return snapshottypes.SnapshotItem{}, fmt.Errorf(
+				"could not commit restored state: %w", err)
 		}
 	}
 
 	// Re-Load the newly commited/restored state instance
 	_, err := store.Load()
 	return snapshotItem, err
+}
+
+// runSnapshotMutationHook executes a snapshot mutation extension. This method
+// uses the snapshotMutationHook on the instance if available, or otherwise it
+// uses the extension configured as the *default*
+//
+// Executes snapshot mutation extension and catches potential panics to ensure
+// data consistency, also making a compromise on availability.
+// When a snapshot mutation extension fails, the data cannot be snapshotted
+// because the extension determines the format of the mutated state machine.
+//
+// See also: [GetSnapshotMutationExtension], [WithSnapshotMutationExtension].
+func (store ChainStateStore) runSnapshotMutationHook(latestState sm.State) ([]byte, error) {
+	// Prepare the contract for state mutation extensions
+	var mutatedStateBytes []byte
+	var snapshotMutationHook client.SnapshotMutationExtensionFn
+
+	// Uses the default extension or the one configured
+	snapshotMutationHook = GetSnapshotMutationExtension()
+	if store.snapshotMutationHook != nil {
+		snapshotMutationHook = store.snapshotMutationHook
+	}
+
+	// Executes snapshot mutation extension and catch potential panics to
+	// ensure data consistency, also making a compromise on availability.
+	//
+	// When a snapshot mutation extension fails, the data cannot be snapshotted
+	// because the extension determines the format of the mutated state machine.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a state mutation extension. This recovery ensures *data consistency*
+		// in case of failing snapshot mutation extensions, and thus breaks the
+		// snapshotting process until the state mutation extension is fine.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in state mutation extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. deep-copy the sm.State
+		// See `multiplex/client.go` to use a custom state mutation extension.
+		// See also [WithSnapshotMutationExtension].
+		mutatedStateBytes = client.InjectSnapshotMutation(
+			store.GetChainID(),
+			latestState.Bytes(),
+			snapshotMutationHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from snapshot mutation extension and stop.
+	// When a snapshot mutation extension fails, the data cannot be snapshotted
+	// because the extension determines the format of the mutated state machine.
+	if err != nil {
+		return []byte{}, err
+	}
+
+	// No errors happened, we can safely use the mutated state instance
+	return mutatedStateBytes, nil
+}
+
+// runSnapshotRestoreHook executes a snapshot restoration extension. This
+// method uses the snapshotRestoreHook on the instance if available, or
+// otherwise it uses the extension configured as the *default*.
+//
+// Executes snapshot restoration extension and catches potential panics
+// to ensure data consistency, also making a compromise on availability.
+// When a snapshot restore extension fails, the data cannot be restored
+// because the extension determines the format of the restored state machine.
+//
+// See also: [GetSnapshotRestoreExtension], [WithSnapshotRestoreExtension].
+func (store ChainStateStore) runSnapshotRestoreHook(stateBytes []byte) ([]byte, error) {
+	// Prepare the contract for state restoration extensions
+	var restoredStateBytes []byte
+	var snapshotRestoreHook client.SnapshotRestoreExtensionFn
+
+	// Uses the default extension or the one configured
+	snapshotRestoreHook = GetSnapshotRestoreExtension()
+	if store.snapshotRestoreHook != nil {
+		snapshotRestoreHook = store.snapshotRestoreHook
+	}
+
+	// Executes snapshot restoration extension and catch potential panics
+	// to ensure data consistency, making a compromise on availability.
+	//
+	// When a snapshot restore extension fails, the data cannot be restored
+	// because the extension determines the format of the mutated state machine.
+	err := func() (err error) {
+		// Recover from potential panic in below block due to inability to inject
+		// a state restoration extension. This recovery ensures *data consistency*
+		// in case of failing snapshot restoration extensions, and thus breaks the
+		// snapshotting process until the state restoration extension is fine.
+		defer func() {
+			if errRecovered := recover(); errRecovered != nil {
+				// Error happened in state restoration extension
+				err = errRecovered.(error)
+			}
+		}()
+
+		// Uses the default extension implementation, i.e. deep-copy the bytes slice
+		// see `multiplex/client.go` to use a custom state restoration extension.
+		// See also [WithSnapshotRestoreExtension].
+		restoredStateBytes = client.InjectSnapshotRestore(
+			store.GetChainID(),
+			stateBytes,
+			snapshotRestoreHook,
+		)
+
+		return err
+	}()
+
+	// Catch recovered errors from snapshot restoration extension and stop.
+	// When a snapshot restoration extension fails, the data cannot be restored
+	// because the extension determines the format of the restored state machine.
+	if err != nil {
+		return []byte{}, err
+	}
+
+	// No errors happened, we can safely use the restored bytes slice
+	return restoredStateBytes, nil
+}
+
+// ----------------------------------------------------------------------------
+// ChainStateStore option helpers
+
+// WithSnapshotMutationExtension is an option helper that allows you to
+// overwrite the default (deep-copying) snapshot mutation extension.
+func WithSnapshotMutationExtension(
+	extensionFn client.SnapshotMutationExtensionFn,
+) func(*ChainStateStore) {
+	return func(store *ChainStateStore) {
+		store.snapshotMutationHook = extensionFn
+	}
+}
+
+// WithSnapshotRestoreExtension is an option helper that allows you to
+// overwrite the default (deep-copying) snapshot restoration extension.
+func WithSnapshotRestoreExtension(
+	extensionFn client.SnapshotRestoreExtensionFn,
+) func(*ChainStateStore) {
+	return func(store *ChainStateStore) {
+		store.snapshotRestoreHook = extensionFn
+	}
 }

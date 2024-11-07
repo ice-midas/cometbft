@@ -27,3 +27,11 @@ func GetSeedConfigExtension() client.SeedConfigExtensionFn {
 func GetSnapshotMutationExtension() client.SnapshotMutationExtensionFn {
 	return client.DefaultSnapshotMutationExtension
 }
+
+// GetSnapshotRestoreExtension returns the active data extension for state restorations.
+//
+// Note that you may change this method to activate a different extension,
+// i.e. after implementing a custom data processing unit, or extension.
+func GetSnapshotRestoreExtension() client.SnapshotRestoreExtensionFn {
+	return client.DefaultSnapshotRestoreExtension
+}
