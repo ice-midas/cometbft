@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cometbft/cometbft/crypto/tmhash"
@@ -36,6 +37,27 @@ func TestMultiplexClientInjectSnapshotMutation(t *testing.T) {
 
 	// But it should not have touched the input config object
 	assert.Equal(t, baseStateBytes, inputStateBytes)
+}
+
+func TestMultiplexClientAuditMutationResult(t *testing.T) {
+	// address and fingerprint added to ChainID
+	testChainId := makeRandomTestChainID()
+
+	// Prepare a base transaction
+	baseMutatedBytes := []byte(`this is not a real transaction.`)
+
+	// Execute the extension / injection, we intentionally force the type
+	// here to prevent compilation for extensions that wouldn't work correctly.
+	var errDelegateCheckTx error
+	errDelegateCheckTx = client.AuditMutationResult(
+		testChainId,
+		baseMutatedBytes,
+		mockCheckMutationResultExtension_SizeAsError, // default_test.go
+	)
+
+	// The extension should have formatted the bytes slice size as an Error
+	expectedMessage := fmt.Sprintf("Mutated state bytes: %d", len(baseMutatedBytes))
+	assert.Equal(t, expectedMessage, errDelegateCheckTx.Error())
 }
 
 func TestMultiplexClientInjectSnapshotRestore(t *testing.T) {

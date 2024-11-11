@@ -34,6 +34,37 @@ func InjectSnapshotMutation(
 	return nextStateBytes
 }
 
+// AuditMutationResult defines a callback that returns an error if the
+// audit of the mutated state fails.
+//
+// We provide an example [DefaultCheckMutationResultExtension] implementation for the
+// extensionFn parameter which always returns nil (no errors).
+//
+// This method is called by [multiplex.ChainStateStore] and may be used to
+// audit state instance mutations *before* they are snapshotted and saved to disk.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extensionFn callback, you can use these in your extension as
+// documented with [DefaultCheckMutationResultExtension].
+func AuditMutationResult(
+	chainId string,
+	mutatedBytes []byte,
+	extensionFn CheckMutationResultExtensionFn,
+) error {
+	// Injects Address and ChainID to the context in case it is
+	// necessary inside the [CheckMutationResultExtensionFn] extension.
+	userAddress := extractAddressFromChainID(chainId)
+	chainContext := context.WithValue(context.TODO(), "Address", userAddress)
+	chainContext = context.WithValue(chainContext, "ChainID", chainId)
+
+	// CALLBACK: You may add custom per-user-chain source code here.
+	//
+	// e.g.: Auditing the mutated state bytes from a custom remote server
+	// by implementing a custom CheckMutationResultExtensionFn, an example is
+	// available with [DefaultCheckMutationResultExtension].
+	return extensionFn(chainContext, mutatedBytes)
+}
+
 // InjectSnapshotRestore defines a callback that returns a restorable state
 // machine bytes representation (raw data).
 //

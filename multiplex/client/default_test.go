@@ -25,6 +25,21 @@ const (
 // ----------------------------------------------------------------------------
 // Mocks
 
+// Type-assertions ensure the compatibility of these mocks with the
+// client contract defined in this client package.
+var _ client.SyncConfigExtensionFn = mockSyncConfigExtension_MutatesHeight
+var _ client.SeedConfigExtensionFn = mockSeedConfigExtension_PrefixOneSeed
+var _ client.ValidatorUpdateExtensionFn = mockValidatorUpdateExtension_CountAsError
+var _ client.ConsensusUpdateExtensionFn = mockConsensusUpdateExtension_MaxBytesAsError
+var _ client.SnapshotMutationExtensionFn = mockSnapshotMutationExtension_HashedState
+var _ client.CheckMutationResultExtensionFn = mockCheckMutationResultExtension_SizeAsError
+var _ client.SnapshotRestoreExtensionFn = mockSnapshotRestoreExtension_HashedState
+var _ client.CheckTxExtensionFn = mockCheckTxExtension_SizeAsError
+var _ client.PrepareProposalExtensionFn = mockPrepareProposalExtension_AppendOneTx
+var _ client.ProcessProposalExtensionFn = mockProcessProposalExtension_AppendOneTx
+var _ client.FinalizeBlockExtensionFn = mockFinalizeBlockExtension_AppendHash
+var _ client.CommitExtensionFn = mockCommitExtension_HeightAsError
+
 // mockSyncConfigExtension_MutatesHeight is an implementation that mutates the
 // baseSyncConf.TrustHeight and increases it by 1.
 func mockSyncConfigExtension_MutatesHeight(
@@ -82,6 +97,15 @@ func mockSnapshotMutationExtension_HashedState(
 ) []byte {
 	nextState := tmhash.Sum(baseState[:])
 	return nextState
+}
+
+// mockCheckTxExtension_SizeAsError is an implementation that reads the
+// mutated state bytes and formats an error that prints the length of the byte slice.
+func mockCheckMutationResultExtension_SizeAsError(
+	ctx context.Context,
+	tx []byte,
+) error {
+	return fmt.Errorf("Mutated state bytes: %d", len(tx))
 }
 
 // mockSnapshotRestoreExtension_HashedState is an implementation that mutates the
@@ -261,6 +285,20 @@ func TestMultiplexClientDefaultSnapshotMutationExtension(t *testing.T) {
 	// The extension does only a deep-copy, so we test that
 	// mutations did not execute on the input bytes slice.
 	assert.Equal(t, baseStateBytes, inputStateBytes)
+}
+
+func TestMultiplexClientDefaultCheckMutationResultExtension(t *testing.T) {
+	// Prepare a base transaction
+	baseStateBytes := []byte(`this is not a real transaction.`)
+	inputStateBytes := baseStateBytes[:]
+
+	// Execute the extension / injection, we intentionally force the type
+	// here to prevent compilation for extensions that wouldn't work correctly.
+	var errCheckMutationResults error
+	errCheckMutationResults = client.DefaultCheckMutationResultExtension(context.TODO(), inputStateBytes)
+
+	// Default extension returns nil (no error)
+	assert.Nil(t, errCheckMutationResults, "DefaultCheckMutationResultExtension must return nil")
 }
 
 func TestMultiplexClientDefaultSnapshotRestoreExtension(t *testing.T) {

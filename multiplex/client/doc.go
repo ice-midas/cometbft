@@ -16,6 +16,7 @@ servers, or which stores data in a separate database, etc.
   - [ValidatorUpdateExtensionFn]: Provides custom auditing/reporting units for validator updates.
   - [ConsensusUpdateExtensionFn]: Provides custom auditing/reporting units for consensus parameter updates.
   - [SnapshotMutationExtensionFn]: Provides custom processing units for snapshots data.
+  - [CheckMutationResultExtensionFn]: Provides custom auditing units for snapshot mutation results.
   - [SnapshotRestoreExtensionFn]: Provides custom restoration units for snapshots data.
   - [CheckTxExtensionFn]: Provides custom auditing/reporting units for transactions.
   - [PrepareProposalExtensionFn]: Provides custom pre-processing units for transactions data.
@@ -32,6 +33,7 @@ An example for [SeedConfigExtensionFn] is: [DefaultSeedConfigExtension]
 An example for [ValidatorUpdateExtensionFn] is: [DefaultValidatorUpdateExtension]
 An example for [ConsensusUpdateExtensionFn] is: [DefaultConsensusUpdateExtension]
 An example for [SnapshotMutationExtensionFn] is: [DefaultSnapshotMutationExtension]
+An example for [CheckMutationResultExtensionFn] is: [DefaultCheckMutationResultExtension]
 An example for [SnapshotRestoreExtensionFn] is: [DefaultSnapshotRestoreExtension]
 An example for [CheckTxExtensionFn] is: [DefaultCheckTxExtension]
 An example for [PrepareProposalExtensionFn] is: [DefaultPrepareProposalExtension]

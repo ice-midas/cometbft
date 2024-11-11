@@ -94,6 +94,20 @@ type SnapshotMutationExtensionFn func(
 	[]byte,
 ) []byte
 
+// CheckMutationResultExtensionFn provides an interface for auditing the result
+// of state mutation extensions that are used in [InjectSnapshotMutation]. This
+// extension notably permits to audit data such as ensure data consistency.
+//
+// This method accepts a *state instance* as a `[]byte` slice.
+// Implementations should return an error if the audit of data fails.
+//
+// This extension is executed when snapshots are taken.
+// See also: [DefaultCheckMutationResuultExtension]
+type CheckMutationResultExtensionFn func(
+	context.Context,
+	[]byte,
+) error
+
 // SnapshotRestoreExtensionFn provides an interface for snapshot restoration
 // extensions that are used in [InjectSnapshotRestore] to delegate the
 // processing of mutated snapshots, to potential extensions.

@@ -163,6 +163,27 @@ func DefaultSnapshotMutationExtension(
 	return nextState
 }
 
+// DefaultCheckMutationResultExtension is an example implementation for the
+// mutation audit extension [CheckMutationResultExtensionFn]. A mutation audit
+// extension may be used to *verify* state mutation results (data consistency).
+//
+// i.e. An extension may be implemented to audit the mutated state machine
+// bytes representation by verifying the latest block hash attached.
+//
+// Note that we inject `Address` and `ChainID` in the Context before calling
+// the proposed extension callback, this example does not make use of these.
+func DefaultCheckMutationResultExtension(
+	_ context.Context, // ctx
+	mutatedState []byte, //nolint:unparam
+) error {
+	// e.g. You may interpret/use the UserAddress and ChainID in extensions.
+	//
+	// userAddress := ctx.Value("Address").(string)
+	// chainId := ctx.Value("ChainID").(string)
+
+	return nil
+}
+
 // DefaultSnapshotRestoreExtension is an example implementation for the state
 // restoration extension [SnapshotRestoreExtensionFn]. A state restoration
 // extension may be used to *process* restored state for a particular network.
