@@ -17,26 +17,18 @@ import (
 	cs "github.com/cometbft/cometbft/internal/consensus"
 	"github.com/cometbft/cometbft/internal/evidence"
 	mempl "github.com/cometbft/cometbft/mempool"
-	"github.com/cometbft/cometbft/statesync"
 )
 
 func TestMultiplexReactorPrepareConsensusInstanceWithReactor(t *testing.T) {
 	numChains := 5
 
-	rootDir, err := os.MkdirTemp("", t.Name())
-	require.NoError(t, err)
+	rootDir, globalCfg, reactor := ResetTestMultiplexConsensus(t,
+		numChains,
+	)
 	defer os.RemoveAll(rootDir)
 
-	globalCfg := config.TestConfig()
-	globalCfg.SetRoot(rootDir)
-	globalCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
-	mockGenesisProvider := mockMultiplexGenesisDocProviderFunc(&globalCfg.MultiplexConfig, numChains)
-
-	// Create a test reactor
-	reactor := makeTestReactorWithGenesisDocProvider(t, globalCfg, mockGenesisProvider)
-
 	// Start the reactor
-	err = reactor.Start()
+	err := reactor.Start()
 	require.NoError(t, err, "should start the multiplex reactor")
 
 	err = reactor.WaitForNetworks()
@@ -65,20 +57,13 @@ func TestMultiplexReactorPrepareConsensusInstanceWithReactor(t *testing.T) {
 func TestMultiplexReactorCreateConsensusInstanceReactors(t *testing.T) {
 	numChains := 5
 
-	rootDir, err := os.MkdirTemp("", t.Name())
-	require.NoError(t, err)
+	rootDir, globalCfg, reactor := ResetTestMultiplexConsensus(t,
+		numChains,
+	)
 	defer os.RemoveAll(rootDir)
 
-	globalCfg := config.TestConfig()
-	globalCfg.SetRoot(rootDir)
-	globalCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
-	mockGenesisProvider := mockMultiplexGenesisDocProviderFunc(&globalCfg.MultiplexConfig, numChains)
-
-	// Create a test reactor
-	reactor := makeTestReactorWithGenesisDocProvider(t, globalCfg, mockGenesisProvider)
-
 	// Start the reactor
-	err = reactor.Start()
+	err := reactor.Start()
 	require.NoError(t, err, "should start the multiplex reactor")
 
 	err = reactor.WaitForNetworks()
@@ -106,13 +91,11 @@ func TestMultiplexReactorCreateConsensusInstanceReactors(t *testing.T) {
 		err = reactor.PrepareConsensusInstanceWithReactor(context.TODO(), chainId)
 		assert.NoError(t, err, "should not error for consensus handshake")
 
-		// Test with stateSync=true;blockSync=false
-		stateSync := true
-		blockSync := false
+		// Test with blockSync=true
+		blockSync := true
 		err = reactor.CreateConsensusInstanceReactors(
 			context.TODO(),
 			chainId,
-			stateSync,
 			blockSync,
 		)
 		assert.NoError(t, err, "should not error creating consensus reactors")
@@ -120,15 +103,35 @@ func TestMultiplexReactorCreateConsensusInstanceReactors(t *testing.T) {
 		// Type-assertions make sure we have correct reactors set.
 		testMempoolReactor := servicesProvider(mx.KEY_REACTOR_MEMPOOL, chainId).(*mempl.Reactor)
 		testBlockSyncReactor := servicesProvider(mx.KEY_REACTOR_BLOCKSYNC, chainId).(*blocksync.Reactor)
-		testStateSyncReactor := servicesProvider(mx.KEY_REACTOR_STATESYNC, chainId).(*statesync.Reactor)
 		testConsensusReactor := servicesProvider(mx.KEY_REACTOR_CONSENSUS, chainId).(*cs.Reactor)
 		testEvidenceReactor := servicesProvider(mx.KEY_REACTOR_EVIDENCE, chainId).(*evidence.Reactor)
 
 		// Also make sure we have actual instances, not nil
 		assert.NotNil(t, testMempoolReactor, "mempool reactor must not be nil")
 		assert.NotNil(t, testBlockSyncReactor, "blockSync reactor must not be nil")
-		assert.NotNil(t, testStateSyncReactor, "stateSync reactor must not be nil")
 		assert.NotNil(t, testConsensusReactor, "consensus reactor must not be nil")
 		assert.NotNil(t, testEvidenceReactor, "evidence reactor must not be nil")
 	}
+}
+
+// CAUTION: the GenesisDocProvider is maleated to contain correct ChainIDs
+// CAUTION: the MultiplexConfig is entirely random and *not synchronized* with genesis docs.
+func ResetTestMultiplexConsensus(
+	t testing.TB,
+	numChains int,
+) (string, *config.Config, *mx.Reactor) {
+	t.Helper()
+
+	rootDir, err := os.MkdirTemp("", t.Name())
+	require.NoError(t, err)
+
+	nodeCfg := config.TestConfig()
+	nodeCfg.SetRoot(rootDir)
+	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
+	mockGenesisProvider := mockMultiplexGenesisDocProviderFunc(&nodeCfg.MultiplexConfig, numChains)
+
+	// Create a test reactor
+	reactor := makeTestReactorWithGenesisDocProvider(t, nodeCfg, mockGenesisProvider)
+
+	return rootDir, nodeCfg, reactor
 }

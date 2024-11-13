@@ -3,7 +3,6 @@ package multiplex
 import (
 	"fmt"
 
-	sm "github.com/cometbft/cometbft/state"
 	bs "github.com/cometbft/cometbft/store"
 )
 
@@ -12,8 +11,8 @@ import (
 //
 // First, a state database instance is retrieved, then the GenesisDoc checksum
 // is validated against the hash stored in the state database.
-// Next, a snapshottable [ChainStateStore] instance is created around the
-// state database instance for the respective replicated chain.
+// Next, a [ChainHistoryStore] instance is created around the state database
+// instance for the respective replicated chain.
 //
 // And finally, this method will *load the state machine* using either the
 // database or the GenesisDoc.
@@ -48,20 +47,25 @@ func (reactor *Reactor) InitMultiplexStates() error {
 			return err
 		}
 
-		// Initialize a ChainStateStore (snapshottable)
+		// Initialize a ChainHistoryStore (snapshottable)
 		dbKeyLayoutVersion := globalConfig.Storage.ExperimentalKeyLayout
-		stateStore := &ChainStateStore{
-			ChainID: chainId,
-			DBStore: sm.NewDBStore(stateDB, sm.StoreOptions{
-				DiscardABCIResponses: false,
-				DBKeyLayout:          dbKeyLayoutVersion,
-			}).(*sm.DBStore),
-		}
+		stateStore := NewChainHistoryStore(stateDB, dbKeyLayoutVersion)
 
-		// Load the state from database or GenesisDoc
-		chainState, err := stateStore.LoadFromDBOrGenesisDoc(genesisDoc)
-		if err != nil {
-			return err
+		// .. and load the state machine
+		chainState, _ := stateStore.LoadArchive(stateKey)
+		if chainState.State.IsEmpty() {
+			// Load the state from database or GenesisDoc
+			stateMachine, err := stateStore.LoadFromDBOrGenesisDoc(genesisDoc)
+			if err != nil {
+				return err
+			}
+
+			chainState = new(HistoricalState)
+			chainState.State = &stateMachine
+			chainState.Data = []byte{}
+
+			// State machine was empty, update now
+			stateStore.Save(stateMachine)
 		}
 
 		// Prepare registerable instance mapped to ChainID

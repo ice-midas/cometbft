@@ -92,16 +92,14 @@ func TestMultiplexReactorCreateTransportSwitches(t *testing.T) {
 		assert.NotNil(t, testSwitch)
 
 		testReactors := testSwitch.Reactors()
-		assert.Len(t, testReactors, 5) // mempool, blocksync, statesync, consensus, evidence
+		assert.Len(t, testReactors, 4) // mempool, blocksync, consensus, evidence
 		assert.Contains(t, testReactors, "MEMPOOL")
 		assert.Contains(t, testReactors, "BLOCKSYNC")
-		assert.Contains(t, testReactors, "STATESYNC")
 		assert.Contains(t, testReactors, "CONSENSUS")
 		assert.Contains(t, testReactors, "EVIDENCE")
 
 		assert.NotNil(t, testSwitch.Reactor("MEMPOOL"))
 		assert.NotNil(t, testSwitch.Reactor("BLOCKSYNC"))
-		assert.NotNil(t, testSwitch.Reactor("STATESYNC"))
 		assert.NotNil(t, testSwitch.Reactor("CONSENSUS"))
 		assert.NotNil(t, testSwitch.Reactor("EVIDENCE"))
 	}
@@ -188,12 +186,10 @@ func ResetTestMultiplexP2P(t testing.TB, numChains int) (string, *config.Config,
 		err = reactor.PrepareConsensusInstanceWithReactor(context.TODO(), chainId)
 		require.NoError(t, err, "should not error for consensus handshake")
 
-		stateSync := true
 		blockSync := false
 		err := reactor.CreateConsensusInstanceReactors(
 			context.TODO(),
 			chainId,
-			stateSync,
 			blockSync,
 		)
 		require.NoError(t, err, "should not error creating consensus reactors")

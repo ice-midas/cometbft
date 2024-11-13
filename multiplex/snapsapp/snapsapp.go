@@ -130,7 +130,7 @@ func NewSnapsApplication(
 
 		// The chain state machine implementation is passed as a commitment
 		// snapshotter - which executes after a block is commited.
-		// Snapshot() and Restore() are implemented in [ChainStateStore].
+		// Snapshot() and Restore() are implemented in [ChainHistoryStore].
 		manager := snapshots.NewManager(
 			chainId,
 			snapshotStore,

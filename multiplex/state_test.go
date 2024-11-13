@@ -88,7 +88,7 @@ func TestMultiplexReactorInitMultiplexStatesEmptyState(t *testing.T) {
 
 	// Do we have all state instances, with correct ChainID?
 	for _, chainId := range reactor.GetNetworks() {
-		chainState := statesProvider(chainId).(sm.State)
+		chainState := statesProvider(chainId).(*mx.HistoricalState)
 		assert.NotNil(t, chainState, "state instance per chain must not be nil")
 
 		// And validate the ChainID
@@ -142,8 +142,13 @@ func TestMultiplexReactorInitMultiplexStatesFilledState(t *testing.T) {
 		customState.LastBlockID = types.BlockID{}
 		customState.AppHash = tmhash.Sum([]byte(chainId)) // mutating AppHash
 
+		archiveData := &mx.HistoricalState{
+			State: &customState,
+			Data:  []byte{},
+		}
+
 		// CAUTION: we inject a custom State here
-		err = stateDb.DB.SetSync(stateKey, customState.Bytes())
+		err = stateDb.DB.SetSync(stateKey, archiveData.Bytes())
 		require.NoError(t, err, "should update state instance in database")
 	}
 
@@ -156,7 +161,7 @@ func TestMultiplexReactorInitMultiplexStatesFilledState(t *testing.T) {
 
 	// Do we have all state instances, with correct ChainID?
 	for _, chainId := range reactor.GetNetworks() {
-		chainState := statesProvider(chainId).(sm.State)
+		chainState := statesProvider(chainId).(*mx.HistoricalState)
 		assert.NotNil(t, chainState, "state instance per chain must not be nil")
 
 		// And validate the loaded state instance contains our
@@ -194,7 +199,7 @@ func TestMultiplexReactorInitMultiplexBlockStores(t *testing.T) {
 }
 
 // CAUTION: the GenesisDocProvider is maleated to contain correct ChainIDs
-// CAUTION: the MultiplexConfig is entirely and *not synchronized* with genesis docs.
+// CAUTION: the MultiplexConfig is entirely random and *not synchronized* with genesis docs.
 func ResetTestMultiplexState(t testing.TB, numChains int, dbInstanceKey string) (string, *config.Config, *mx.Reactor) {
 	t.Helper()
 

@@ -14,7 +14,6 @@ import (
 	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/p2p/pex"
-	"github.com/cometbft/cometbft/statesync"
 )
 
 // CreateTransportSwitches initializes P2P transports using the legacy
@@ -104,8 +103,6 @@ func (reactor *Reactor) CreateTransportSwitches(ctx context.Context) error {
 			serviceProvider(KEY_REACTOR_CONSENSUS, chainId).(*cs.Reactor))
 		eventSwitch.AddReactor("EVIDENCE",
 			serviceProvider(KEY_REACTOR_EVIDENCE, chainId).(*evidence.Reactor))
-		eventSwitch.AddReactor("STATESYNC",
-			serviceProvider(KEY_REACTOR_STATESYNC, chainId).(*statesync.Reactor))
 
 		if len(persistentPeers) > 0 {
 			if err := eventSwitch.AddPersistentPeers(persistentPeers); err != nil {

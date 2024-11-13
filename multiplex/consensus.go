@@ -11,7 +11,6 @@ import (
 	"github.com/cometbft/cometbft/internal/evidence"
 	mempl "github.com/cometbft/cometbft/mempool"
 	sm "github.com/cometbft/cometbft/state"
-	"github.com/cometbft/cometbft/statesync"
 	bs "github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 )
@@ -46,15 +45,15 @@ func (reactor *Reactor) PrepareConsensusInstanceWithReactor(
 
 	// Retrieve the correct instances/services by chain
 	genesisDoc := genesisDocProvider(chainId)
-	stateMachine := stateProvider(chainId).(sm.State)
-	stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+	stateMachine := stateProvider(chainId).(*HistoricalState)
+	stateStore := stateStoreProvider(chainId).(*ChainHistoryStore)
 	blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
 	eventBus := servicesProvider(KEY_EVENTBUS, chainId).(*types.EventBus)
 
 	// 1) Consensus handshake with ABCI
 	handshaker := cs.NewHandshaker(
 		stateStore,
-		stateMachine,
+		stateMachine.State.Copy(),
 		blockStore,
 		genesisDoc,
 	)
@@ -88,24 +87,20 @@ func (reactor *Reactor) PrepareConsensusInstanceWithReactor(
 // 3) Create the block executor
 // 4) Create block-sync reactor
 // 5) Create consensus state / reactor
-// 6) Create state sync reactor
 //
 // Afterwards, pointers to the created instances are registered on the reactor.
 //
 // This method registers instances in the multiplexRegistry:
-// - `flag/stateSync`: A flag that determines whether state-sync must run.
 // - `flag/blockSync`: A flag that determines whether block-sync must run.
 //
 // This method also registers services in the servicesRegistry:
 // - `reactor/mempool`: The mempool reactor with Mempool ABCI conn.
 // - `reactor/blockSync`: The block-sync reactor with a block executor.
-// - `reactor/stateSync`: The state-sync reactor with Snapshot ABCI conn.
 // - `reactor/consensus`: The consensus reactor with WAL file overwrite.
 // - `reactor/evidence`: The evidence reactor around state- and block stores.
 func (reactor *Reactor) CreateConsensusInstanceReactors(
 	ctx context.Context,
 	chainId string,
-	stateSync bool,
 	blockSync bool,
 ) error {
 	// First make sure the ABCI is setup correctly
@@ -124,7 +119,7 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 
 	// The node config contains the configuration overwrite.
 	cfgOverwrite := configProvider(chainId).(*config.Config)
-	stateMachine := statesProvider(chainId).(sm.State)
+	stateMachine := statesProvider(chainId).(*HistoricalState)
 	privValidator := privvalProvider(chainId).(types.PrivValidator)
 	eventBus := servicesProvider(KEY_EVENTBUS, chainId).(*types.EventBus)
 
@@ -142,7 +137,6 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 	memplMetricsProvider := mempl.PrometheusMetrics(metricsNames, "chain_id", chainId)
 	stateMetricsProvider := sm.PrometheusMetrics(metricsNames, "chain_id", chainId)
 	bsyncMetricsProvider := blocksync.PrometheusMetrics(metricsNames, "chain_id", chainId)
-	ssyncMetricsProvider := statesync.PrometheusMetrics(metricsNames, "chain_id", chainId)
 	consensusMetricsProvider := cs.PrometheusMetrics(metricsNames, "chain_id", chainId)
 
 	// 1) Create the mempool / mempool reactor
@@ -154,14 +148,14 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 		reactor.abciClient.Mempool(chainId),
 		stateMachine.LastBlockHeight,
 		mempl.WithMetrics(memplMetricsProvider),
-		mempl.WithPreCheck(sm.TxPreCheck(stateMachine)),
-		mempl.WithPostCheck(sm.TxPostCheck(stateMachine)),
+		mempl.WithPreCheck(sm.TxPreCheck(stateMachine.State.Copy())),
+		mempl.WithPostCheck(sm.TxPostCheck(stateMachine.State.Copy())),
 	)
 	mempool.SetLogger(memplLogger)
 	mempoolReactor := mempl.NewReactor(
 		cfgOverwrite.Mempool,
 		mempool,
-		stateSync || blockSync, // "waitSync"
+		blockSync, // "waitSync"
 	)
 	if cfgOverwrite.Consensus.WaitForTxs() {
 		mempool.EnableTxsAvailable()
@@ -170,7 +164,7 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 
 	// 2) Create the evidence pool / evidence reactor
 	evidenceDB := evidenceDbProvider(chainId).(*ChainDB)
-	stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+	stateStore := stateStoreProvider(chainId).(*ChainHistoryStore)
 	blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
 
 	evidenceLogger := reactor.logger.With("module", "evidence")
@@ -200,25 +194,18 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 		sm.BlockExecutorWithMetrics(stateMetricsProvider),
 	)
 
+	// state-sync is disabled, so stays at 0!
 	offlineStateSyncHeight := int64(0)
-	if blockStore.Height() == 0 {
-		offlineStateSyncHeight, err = blockExecutor.Store().GetOfflineStateSyncHeight()
-		if err != nil && err.Error() != "value empty" {
-			return fmt.Errorf(
-				"found inconsistent height for ChainID %s ; expected statesynced height %v: %w",
-				chainId, stateMachine.LastBlockHeight, err)
-		}
-	}
 
 	// 4) Create block-sync reactor
 	//
 	// Don't start block sync if we're doing a state sync first or if
 	// we are the only validator on the network (caller sets blockSync).
 	blockSyncReactor := blocksync.NewReactor(
-		stateMachine,
+		stateMachine.State.Copy(),
 		blockExecutor,
 		blockStore,
-		blockSync && !stateSync,
+		blockSync,
 		privValPubKey.Address(),
 		bsyncMetricsProvider,
 		offlineStateSyncHeight,
@@ -232,7 +219,7 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 	consensusLogger := reactor.logger.With("module", "consensus")
 	consensusState := cs.NewState(
 		cfgOverwrite.Consensus, // contains overwrite of WAL
-		stateMachine,
+		stateMachine.State.Copy(),
 		blockExecutor,
 		blockStore,
 		mempool,
@@ -246,7 +233,7 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 	}
 	consensusReactor := cs.NewReactor(
 		consensusState,
-		stateSync || blockSync, // "waitSync"
+		blockSync, // "waitSync"
 		cs.ReactorMetrics(consensusMetricsProvider),
 	)
 	consensusReactor.SetLogger(consensusLogger)
@@ -254,29 +241,11 @@ func (reactor *Reactor) CreateConsensusInstanceReactors(
 	// consensusReactor will set it on consensusState and blockExecutor
 	consensusReactor.SetEventBus(eventBus)
 
-	// 6) Create state sync reactor
-	//
-	// Reset the offline state sync height and schedule a state sync if requested.
-	err = stateStore.SetOfflineStateSyncHeight(0)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to reset the offline state sync height for ChainID %s: %w", chainId, err)
-	}
-	stateSyncReactor := statesync.NewReactor(
-		*cfgOverwrite.StateSync,
-		reactor.abciClient.Snapshot(chainId),
-		reactor.abciClient.Query(chainId),
-		ssyncMetricsProvider,
-	)
-	stateSyncReactor.SetLogger(reactor.logger.With("module", "statesync"))
-
 	// Prepare registerable instances mapped to ChainID
 	reactor.RegisterService(KEY_REACTOR_MEMPOOL, chainId, mempoolReactor)
 	reactor.RegisterService(KEY_REACTOR_BLOCKSYNC, chainId, blockSyncReactor)
-	reactor.RegisterService(KEY_REACTOR_STATESYNC, chainId, stateSyncReactor)
 	reactor.RegisterService(KEY_REACTOR_CONSENSUS, chainId, consensusReactor)
 	reactor.RegisterService(KEY_REACTOR_EVIDENCE, chainId, evidenceReactor)
-	reactor.RegisterInstance(KEY_FLAG_STATESYNC, chainId, stateSync == true)
 	reactor.RegisterInstance(KEY_FLAG_BLOCKSYNC, chainId, blockSync == true)
 
 	return nil

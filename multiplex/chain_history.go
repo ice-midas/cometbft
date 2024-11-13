@@ -4,15 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	protoio "github.com/cosmos/gogoproto/io"
 	"github.com/cosmos/gogoproto/proto"
 
-	cmtstate "github.com/cometbft/cometbft/api/cometbft/state/v1"
 	cmtos "github.com/cometbft/cometbft/internal/os"
 	sm "github.com/cometbft/cometbft/state"
+	"github.com/cometbft/cometbft/types"
 
+	mxp2p "github.com/cometbft/cometbft/api/cometbft/multiplex/v1"
 	"github.com/cometbft/cometbft/multiplex/client"
 	"github.com/cometbft/cometbft/multiplex/snapshots"
 	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
@@ -33,16 +33,48 @@ var (
 )
 
 // ----------------------------------------------------------------------------
-// ChainStateStore
+// HistoricalState
 //
-// ChainStateStore embeds a [sm.DBStore] pointer and adds a ChainID. This store
+// HistoricalState embeds a [sm.State] state machine instance and adds an
+// arbitrary binary data payload to it to allow storing relevant historical
+// state data alongside a state machine instance.
+type HistoricalState struct {
+	// Embeds a [sm.State], i.e. a state machine instance which also contains
+	// a validators set, latest block information and consensus parameters.
+	//
+	// This embedding contains the actual block height at which a historical
+	// data snapshot is taken.
+	*sm.State
+
+	// Adds a binary data payload which may contain any relevant historical
+	// state data, e.g. a total number of transactions since inception.
+	//
+	// This payload is provided as a `[]byte` slice to maximize flexibility.
+	// Note, it is recommended to store custom data payloads in JSON format.
+	Data []byte
+}
+
+// NewHistoricalState creates a new state machine and attaches data to it.
+func NewHistoricalState(chainId string, data []byte) *HistoricalState {
+	return &HistoricalState{
+		State: &sm.State{
+			ChainID: chainId,
+		},
+		Data: data,
+	}
+}
+
+// ----------------------------------------------------------------------------
+// ChainHistoryStore
+//
+// ChainHistoryStore embeds a [sm.DBStore] pointer and adds a ChainID. This store
 // implementation is compatible with [snapshots.StateSnapshotter] such that
 // the full state instance may be *restored* (state-sync) from snapshot files.
 //
 // Note that this structure embeds a [sm.DBStore] which provides methods for
 // the implementation of an interface [sm.Store]. This structure overwrites the
-// Load method to load the state from a database instance.
-type ChainStateStore struct {
+// Load method to load the historical state from a database instance.
+type ChainHistoryStore struct {
 	ChainID     string
 	*sm.DBStore // embeds an implementation of [sm.Store]
 
@@ -50,41 +82,111 @@ type ChainStateStore struct {
 	chainRegistry ChainRegistry
 
 	// Extensions / Hooks
-	snapshotMutationHook client.SnapshotMutationExtensionFn
-	snapshotRestoreHook  client.SnapshotRestoreExtensionFn
+	snapshotMutationHook    client.SnapshotMutationExtensionFn
+	checkMutationResultHook client.CheckMutationResultExtensionFn
+	snapshotRestoreHook     client.SnapshotRestoreExtensionFn
 }
 
-// MultiplexChainStore maps ChainIDs to state store instances
-type MultiplexChainStore map[string]*ChainStateStore
+// MultiplexArchiveStore maps ChainIDs to history store instances
+type MultiplexArchiveStore map[string]*ChainHistoryStore
 
 // State machine compatibility check
-var _ sm.Store = (*ChainStateStore)(nil)
-var _ snapshots.StateSnapshotter = (*ChainStateStore)(nil)
+var _ sm.Store = (*ChainHistoryStore)(nil)
+var _ snapshots.StateSnapshotter = (*ChainHistoryStore)(nil)
 
-// GetStateMachine returns the latest application state (state machine).
-//
-// GetStateMachine implements [snapshottypes.StateSnapshotter]
-func (store ChainStateStore) GetStateMachine() (sm.State, error) {
-	return store.Load()
+func NewChainHistoryStore(
+	chainDb *ChainDB,
+	dbKeyLayoutVersion string,
+) *ChainHistoryStore {
+	return &ChainHistoryStore{
+		ChainID: chainDb.ChainID,
+		DBStore: sm.NewDBStore(chainDb, sm.StoreOptions{
+			DiscardABCIResponses: false,
+			DBKeyLayout:          dbKeyLayoutVersion,
+		}).(*sm.DBStore),
+	}
 }
 
-// Load loads the State from the database using the stateKey.
+// Save persists the State, the ValidatorsInfo, and the ConsensusParamsInfo to the database.
+// This flushes the writes (e.g. calls SetSync).
+//
+// CAUTION: This method is called in the consensus handshake method.
+// See also: internal/consensus/replay.go
+func (store ChainHistoryStore) Save(state sm.State) error {
+	// First intend to store state machine
+	err := store.DBStore.Save(state)
+	if err != nil {
+		return err
+	}
+
+	// If the above worked, we may re-wrap to HistoricalState
+	stateMachine := state.Copy()
+	archiveState := &HistoricalState{
+		State: &stateMachine,
+		Data:  []byte{},
+	}
+
+	// .. and update the database entry
+	return store.GetDatabase().SetSync(stateKey, archiveState.Bytes())
+}
+
+// LoadFromDBOrGenesisDoc loads the most recent state from the database,
+// or creates a new one from the given genesisDoc.
+func (store ChainHistoryStore) LoadFromDBOrGenesisDoc(
+	genesisDoc *types.GenesisDoc,
+) (sm.State, error) {
+	state, err := store.LoadArchive(stateKey)
+	if err != nil {
+		return sm.State{}, err
+	}
+
+	if state.State.IsEmpty() {
+		var err error
+		stateMachine, err := sm.MakeGenesisState(genesisDoc)
+		if err != nil {
+			return sm.State{}, err
+		}
+
+		state = new(HistoricalState)
+		state.State = &stateMachine
+		state.Data = []byte{} // TODO(midas): use AppState or add data field to genesis?
+	}
+
+	return state.State.Copy(), nil
+}
+
+// Load loads the HistoricalState from the database using the stateKey.
 //
 // Load implements [sm.Store]
-func (store ChainStateStore) Load() (sm.State, error) {
-	return store.loadState(stateKey)
+func (store ChainHistoryStore) Load() (sm.State, error) {
+	archive, err := store.LoadArchive(stateKey)
+	if err != nil {
+		return sm.State{}, nil
+	}
+
+	return archive.State.Copy(), err
+}
+
+// LoadArchive loads the [HistoricalState] from the database given a key.
+func (store ChainHistoryStore) LoadArchive(key []byte) (*HistoricalState, error) {
+	buf, err := store.GetDatabase().Get(key)
+	if err != nil {
+		return NewHistoricalState(store.ChainID, []byte{}), err
+	}
+
+	return store.loadArchiveFromPayload(buf)
 }
 
 // SetChainRegistry registers a [ChainRegistry] which is used to find
 // user addresses by ChainID.
-func (store ChainStateStore) SetChainRegistry(reg ChainRegistry) {
+func (store ChainHistoryStore) SetChainRegistry(reg ChainRegistry) {
 	store.chainRegistry = reg
 }
 
 // GetUserAddress returns a hexadecimal representation of the user address
 // corresponding to the current ChainID, given it exists. Otherwise it will
 // return an empty string.
-func (store ChainStateStore) GetUserAddress() string {
+func (store ChainHistoryStore) GetUserAddress() string {
 	if store.chainRegistry == nil {
 		return ""
 	}
@@ -98,7 +200,7 @@ func (store ChainStateStore) GetUserAddress() string {
 }
 
 // GetChainID returns the current ChainID as a string.
-func (store ChainStateStore) GetChainID() string {
+func (store ChainHistoryStore) GetChainID() string {
 	return store.ChainID
 }
 
@@ -107,10 +209,7 @@ func (store ChainStateStore) GetChainID() string {
 // This method is called as part of the process of restoration of snapshots
 // which is issued in a separate goroutine. The state machine instance in
 // the database is updated to contain the snapshot's state instance.
-//
-// CAUTION: This method overwrites the state machine instance as stored
-// in the state database, using stateKey.
-func (store ChainStateStore) Commit(state sm.State) error {
+func (store ChainHistoryStore) Commit(state HistoricalState) error {
 	// (1): Retrieves the current state from DB
 	oldState, err := store.GetStateMachine()
 	if err != nil {
@@ -125,7 +224,7 @@ func (store ChainStateStore) Commit(state sm.State) error {
 		)
 	}
 
-	// (3): Commit the new State to DB
+	// (3): Commit the new HistoricalState to DB
 	if err := store.GetDatabase().Set(stateKey, state.Bytes()); err != nil {
 		return err
 	}
@@ -133,10 +232,44 @@ func (store ChainStateStore) Commit(state sm.State) error {
 	return nil
 }
 
+// loadArchiveFromPayload takes a bytes payload and unmarshals it to a [HistoricalState].
+func (store ChainHistoryStore) loadArchiveFromPayload(
+	payload []byte,
+) (*HistoricalState, error) {
+	if len(payload) == 0 {
+		return NewHistoricalState(store.ChainID, []byte{}), nil
+	}
+
+	sp := new(mxp2p.HistoricalState)
+
+	err := proto.Unmarshal(payload, sp)
+	if err != nil {
+		// DATA HAS BEEN CORRUPTED OR THE SPEC HAS CHANGED
+		cmtos.Exit(fmt.Sprintf(`LoadArchive: Data has been corrupted or its spec has changed:
+		%v\n`, err))
+	}
+
+	historicalState, err := FromProto(sp)
+	if err != nil {
+		return NewHistoricalState(store.ChainID, []byte{}), err
+	}
+	return historicalState, nil
+}
+
+// ----------------------------------------------------------------------------
+// ChainHistoryStore implements snapshottypes.Snapshotter
+
+// GetStateMachine returns the latest application state (state machine).
+//
+// GetStateMachine implements [snapshottypes.StateSnapshotter]
+func (store ChainHistoryStore) GetStateMachine() (sm.State, error) {
+	return store.Load()
+}
+
 // AppHash returns the application hash as available from the state machine.
 //
 // AppHash implements [snapshottypes.StateSnapshotter]
-func (store ChainStateStore) AppHash() []byte {
+func (store ChainHistoryStore) AppHash() []byte {
 	// Load the state machine
 	sm, err := store.GetStateMachine()
 
@@ -151,43 +284,6 @@ func (store ChainStateStore) AppHash() []byte {
 	return sm.AppHash
 }
 
-// loadState loads the State from the database given a key.
-func (store ChainStateStore) loadState(key []byte) (state sm.State, err error) {
-	start := time.Now()
-	buf, err := store.GetDatabase().Get(key)
-	if err != nil {
-		return state, err
-	}
-
-	defer addTimeSample(store.StoreOptions.Metrics.StoreAccessDurationSeconds.With("method", "load"), start)()
-	return store.loadStateFromPayload(buf)
-}
-
-// loadStateFromPayload takes a bytes payload and unmarshals it to a [sm.State].
-func (store ChainStateStore) loadStateFromPayload(payload []byte) (state sm.State, err error) {
-	if len(payload) == 0 {
-		return sm.State{}, nil
-	}
-
-	sp := new(cmtstate.State)
-
-	err = proto.Unmarshal(payload, sp)
-	if err != nil {
-		// DATA HAS BEEN CORRUPTED OR THE SPEC HAS CHANGED
-		cmtos.Exit(fmt.Sprintf(`LoadState: Data has been corrupted or its spec has changed:
-		%v\n`, err))
-	}
-
-	sm, err := sm.FromProto(sp)
-	if err != nil {
-		return state, err
-	}
-	return *sm, nil
-}
-
-// ----------------------------------------------------------------------------
-// ChainStateStore implements snapshottypes.Snapshotter
-
 // The snapshot output for a given format must be identical across nodes such
 // that chunks from different sources fit together. If the output for a given
 // format changes (at the byte level), the snapshot format must be bumped.
@@ -196,12 +292,8 @@ func (store ChainStateStore) loadStateFromPayload(payload []byte) (state sm.Stat
 // contain a bytes payload of the state store. As such, each SnapshotItem
 // represents a state instance and snapshots contain only one item.
 //
-// It is safe to call the [client.InjectSnapshotMutation] extension because
-// the caller is inside a *separate* goroutine, spawned for the process of
-// creation of snapshots which is run in a separate goroutine.
-//
 // Snapshot implements [snapshottypes.StateSnapshotter]
-func (store ChainStateStore) Snapshot(
+func (store ChainHistoryStore) Snapshot(
 	height uint64,
 	protoWriter protoio.Writer,
 ) error {
@@ -211,7 +303,8 @@ func (store ChainStateStore) Snapshot(
 	}
 
 	// Load latest state for further verifications
-	latestState, err := store.Load()
+	// LoadArchive returns a HistoricalState instance.
+	latestState, err := store.LoadArchive(stateKey)
 	if err != nil {
 		return fmt.Errorf("could not load state to create snapshot: %w", err)
 	}
@@ -269,7 +362,7 @@ func (store ChainStateStore) Snapshot(
 // and commits the new state if available.
 //
 // Restore implements [snapshottypes.StateSnapshotter]
-func (store ChainStateStore) Restore(
+func (store ChainHistoryStore) Restore(
 	height uint64,
 	format uint32,
 	protoReader protoio.Reader,
@@ -288,14 +381,16 @@ RESTORE_LOOP:
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return snapshottypes.SnapshotItem{}, fmt.Errorf("could not read snapshot item message: %w", err)
+			return snapshottypes.SnapshotItem{}, fmt.Errorf(
+				"could not read snapshot item message: %w", err)
 		}
 
 		switch item := snapshotItem.Item.(type) {
 		case *snapshottypes.SnapshotItem_Store:
 			restoredStateBytes = item.Store.Payload
 			if restoredStateBytes == nil || len(restoredStateBytes) == 0 {
-				return snapshottypes.SnapshotItem{}, errors.New("found empty snapshot item payload")
+				return snapshottypes.SnapshotItem{}, errors.New(
+					"found empty snapshot item payload")
 			}
 
 			// store.logger.Debug("restoring snapshot",
@@ -322,15 +417,15 @@ RESTORE_LOOP:
 				"CLIENT PANIC: failing snapshot restoration extension: %w", err)
 		}
 
-		// Create a [sm.State] instance from snapshot item data
-		newState, err := store.loadStateFromPayload(restoredStateBytes)
+		// Create a [HistoricalState] instance from snapshot item data
+		newState, err := store.loadArchiveFromPayload(restoredStateBytes)
 		if err != nil {
 			return snapshottypes.SnapshotItem{}, fmt.Errorf(
 				"could not load snapshot data: %w", err)
 		}
 
 		// Commit the restoration process, this updates the database
-		if err = store.Commit(newState); err != nil {
+		if err = store.Commit(*newState); err != nil {
 			return snapshottypes.SnapshotItem{}, fmt.Errorf(
 				"could not commit restored state: %w", err)
 		}
@@ -340,6 +435,110 @@ RESTORE_LOOP:
 	_, err := store.Load()
 	return snapshotItem, err
 }
+
+// ----------------------------------------------------------------------------
+// HistoricalState rewrites [sm.State] methods
+
+// Bytes serializes the HistoricalState using protobuf.
+// It panics if either casting to protobuf or serialization fails.
+func (state HistoricalState) Bytes() []byte {
+	hsm, err := state.ToProto()
+	if err != nil {
+		panic(err)
+	}
+	bz, err := proto.Marshal(hsm)
+	if err != nil {
+		panic(err)
+	}
+	return bz
+}
+
+// ToProto takes the local state type and returns the equivalent protobuf message.
+func (state *HistoricalState) ToProto() (*mxp2p.HistoricalState, error) {
+	if state == nil {
+		return nil, errors.New("historicalState is nil")
+	}
+
+	hsm := new(mxp2p.HistoricalState)
+
+	// Delegates extracting the state machine to state module
+	smProto, err := state.State.ToProto()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not create protobuf for historical state: %w", err)
+	}
+
+	hsm.State = *smProto
+	hsm.Data = state.Data
+
+	return hsm, nil
+}
+
+// FromProto takes a historical state proto message & returns the local state type.
+func FromProto(pb *mxp2p.HistoricalState) (*HistoricalState, error) { //nolint:golint
+	if pb == nil {
+		return nil, errors.New("nil HistoricalState")
+	}
+
+	historicalState := new(HistoricalState)
+
+	// Delegates loading the state machine to state module
+	stateMachine, err := sm.FromProto(&pb.State)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not load state machine from protobuf: %w", err)
+	}
+
+	historicalState.State = stateMachine
+	historicalState.Data = pb.Data
+	return historicalState, nil
+}
+
+// ----------------------------------------------------------------------------
+// ChainHistoryStore option helpers
+
+// WithChainRegistry is an option helper that allows you to
+// overwrite the internal chainRegistry instance.
+func WithChainRegistry(
+	chainRegistry ChainRegistry,
+) func(*ChainHistoryStore) {
+	return func(store *ChainHistoryStore) {
+		store.chainRegistry = chainRegistry
+	}
+}
+
+// WithSnapshotMutationExtension is an option helper that allows you to
+// overwrite the default (deep-copying) snapshot mutation extension.
+func WithSnapshotMutationExtension(
+	extensionFn client.SnapshotMutationExtensionFn,
+) func(*ChainHistoryStore) {
+	return func(store *ChainHistoryStore) {
+		store.snapshotMutationHook = extensionFn
+	}
+}
+
+// WithCheckMutationResultExtension is an option helper that allows you to
+// overwrite the default (nil-returning) mutation result audit extension.
+func WithCheckMutationResultExtension(
+	extensionFn client.CheckMutationResultExtensionFn,
+) func(*ChainHistoryStore) {
+	return func(store *ChainHistoryStore) {
+		store.checkMutationResultHook = extensionFn
+	}
+}
+
+// WithSnapshotRestoreExtension is an option helper that allows you to
+// overwrite the default (deep-copying) snapshot restoration extension.
+func WithSnapshotRestoreExtension(
+	extensionFn client.SnapshotRestoreExtensionFn,
+) func(*ChainHistoryStore) {
+	return func(store *ChainHistoryStore) {
+		store.snapshotRestoreHook = extensionFn
+	}
+}
+
+// ----------------------------------------------------------------------------
+// ChainHistoryStore internal extension hooks
 
 // runSnapshotMutationHook executes a snapshot mutation extension. This method
 // uses the snapshotMutationHook on the instance if available, or otherwise it
@@ -351,7 +550,9 @@ RESTORE_LOOP:
 // because the extension determines the format of the mutated state machine.
 //
 // See also: [GetSnapshotMutationExtension], [WithSnapshotMutationExtension].
-func (store ChainStateStore) runSnapshotMutationHook(latestState sm.State) ([]byte, error) {
+func (store ChainHistoryStore) runSnapshotMutationHook(
+	latestState *HistoricalState,
+) ([]byte, error) {
 	// Prepare the contract for state mutation extensions
 	var mutatedStateBytes []byte
 	var snapshotMutationHook client.SnapshotMutationExtensionFn
@@ -388,6 +589,8 @@ func (store ChainStateStore) runSnapshotMutationHook(latestState sm.State) ([]by
 			snapshotMutationHook,
 		)
 
+		// XXX return client.AuditMutationResult(...)
+
 		return err
 	}()
 
@@ -412,7 +615,9 @@ func (store ChainStateStore) runSnapshotMutationHook(latestState sm.State) ([]by
 // because the extension determines the format of the restored state machine.
 //
 // See also: [GetSnapshotRestoreExtension], [WithSnapshotRestoreExtension].
-func (store ChainStateStore) runSnapshotRestoreHook(stateBytes []byte) ([]byte, error) {
+func (store ChainHistoryStore) runSnapshotRestoreHook(
+	stateBytes []byte,
+) ([]byte, error) {
 	// Prepare the contract for state restoration extensions
 	var restoredStateBytes []byte
 	var snapshotRestoreHook client.SnapshotRestoreExtensionFn
@@ -461,27 +666,4 @@ func (store ChainStateStore) runSnapshotRestoreHook(stateBytes []byte) ([]byte, 
 
 	// No errors happened, we can safely use the restored bytes slice
 	return restoredStateBytes, nil
-}
-
-// ----------------------------------------------------------------------------
-// ChainStateStore option helpers
-
-// WithSnapshotMutationExtension is an option helper that allows you to
-// overwrite the default (deep-copying) snapshot mutation extension.
-func WithSnapshotMutationExtension(
-	extensionFn client.SnapshotMutationExtensionFn,
-) func(*ChainStateStore) {
-	return func(store *ChainStateStore) {
-		store.snapshotMutationHook = extensionFn
-	}
-}
-
-// WithSnapshotRestoreExtension is an option helper that allows you to
-// overwrite the default (deep-copying) snapshot restoration extension.
-func WithSnapshotRestoreExtension(
-	extensionFn client.SnapshotRestoreExtensionFn,
-) func(*ChainStateStore) {
-	return func(store *ChainStateStore) {
-		store.snapshotRestoreHook = extensionFn
-	}
 }

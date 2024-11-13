@@ -108,8 +108,8 @@ func TestABCI_Info(t *testing.T) {
 	testChainId := suite.reactor.GetNetworks()[0]
 
 	// Check that we have a correct state store
-	// We must cast to ChainStateStore for database access
-	chainStore := suite.reactor.GetStateStore(testChainId).(*mx.ChainStateStore)
+	// We must cast to ChainHistoryStore for database access
+	chainStore := suite.reactor.GetStateStore(testChainId).(*mx.ChainHistoryStore)
 	require.NotNil(t, chainStore)
 
 	reqTestInfo := abci.InfoRequest{}
@@ -143,12 +143,12 @@ func TestABCI_InitChain(t *testing.T) {
 	testChainId := suite.reactor.GetNetworks()[0]
 
 	// Check that we have a correct state store
-	// We must cast to ChainStateStore for database access
-	chainStore := suite.reactor.GetStateStore(testChainId).(*mx.ChainStateStore)
+	// We must cast to ChainHistoryStore for database access
+	chainStore := suite.reactor.GetStateStore(testChainId).(*mx.ChainHistoryStore)
 	require.NotNil(t, chainStore)
 
 	// Store custom state machine instance
-	emptyState := &sm.State{}
+	emptyState := &mx.HistoricalState{State: &sm.State{}, Data: []byte{}}
 	chainStore.GetDatabase().Set(stateKey, emptyState.Bytes())
 
 	// Should error given unknown ChainID
@@ -175,7 +175,12 @@ func TestABCI_InitChain(t *testing.T) {
 		AppState:        []byte(`{}`),
 	})
 	require.NoError(t, err, "should not error creating state machine")
-	chainStore.GetDatabase().Set(stateKey, genState.Bytes())
+
+	archiveState := &mx.HistoricalState{
+		State: &genState,
+		Data:  []byte{},
+	}
+	chainStore.GetDatabase().Set(stateKey, archiveState.Bytes())
 
 	// Should succeed given corret ChainID
 	initChainRes, err = suite.snapsApp.InitChain(context.TODO(), &abci.InitChainRequest{

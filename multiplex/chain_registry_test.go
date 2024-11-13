@@ -368,7 +368,7 @@ func makeRandomMultiplexConfig(t testing.TB, numChains int) config.MultiplexConf
 		P2PStartPort: 30001,
 		RPCStartPort: 40001,
 		SnapshotOptions: map[config.ReplicationStrategy]config.SnapshotOptions{
-			mx.NetworkReplicationStrategy(): config.NewSnapshotOptions(1, 1, 1),
+			mx.HistoryReplicationStrategy(): config.NewSnapshotOptions(1, 1, 1),
 		},
 	}
 }

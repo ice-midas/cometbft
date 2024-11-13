@@ -638,7 +638,6 @@ func NewNodeWithServices(
 		bcReactor:        sw.Reactor("BLOCKSYNC"),
 		mempoolReactor:   sw.Reactor("MEMPOOL").(*mempl.Reactor),
 		consensusReactor: sw.Reactor("CONSENSUS").(*cs.Reactor),
-		stateSyncReactor: sw.Reactor("STATESYNC").(*statesync.Reactor),
 		pexReactor:       sw.Reactor("PEX").(*pex.Reactor),
 	}
 }

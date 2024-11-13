@@ -177,11 +177,11 @@ func (m *mockStateSnapshotter) AppHash() []byte {
 }
 
 func (m *mockStateSnapshotter) SnapshotFormat() uint32 {
-	return snapshottypes.CurrentNetworkFormat
+	return snapshottypes.CurrentFormat
 }
 
 func (m *mockStateSnapshotter) SupportedFormats() []uint32 {
-	return []uint32{snapshottypes.CurrentNetworkFormat}
+	return []uint32{snapshottypes.CurrentFormat}
 }
 
 type mockStorageSnapshotter struct {
@@ -215,11 +215,11 @@ func (m *mockErrorStateSnapshotter) AppHash() []byte {
 }
 
 func (m *mockErrorStateSnapshotter) SnapshotFormat() uint32 {
-	return snapshottypes.CurrentNetworkFormat
+	return snapshottypes.CurrentFormat
 }
 
 func (m *mockErrorStateSnapshotter) SupportedFormats() []uint32 {
-	return []uint32{snapshottypes.CurrentNetworkFormat}
+	return []uint32{snapshottypes.CurrentFormat}
 }
 
 // setupBusyManager creates a manager with an empty store that is busy creating a snapshot at height 1.

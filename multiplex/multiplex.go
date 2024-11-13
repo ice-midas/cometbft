@@ -49,7 +49,6 @@ func (reactor *Reactor) createMultiplexNodesWithServices(
 	transportProvider := reactor.GetInstanceProvider(KEY_P2P_TRANSPORT)
 	stateStoreProvider := reactor.GetInstanceProvider(KEY_STORE_STATE)
 	blockStoreProvider := reactor.GetInstanceProvider(KEY_STORE_BLOCK)
-	stateSyncFlagProvider := reactor.GetInstanceProvider(KEY_FLAG_STATESYNC)
 
 	// Retrieve ordered list of networks
 	replicatedChains := chainRegistry.GetChains()
@@ -83,9 +82,9 @@ func (reactor *Reactor) createMultiplexNodesWithServices(
 		pruner := serviceProvider(KEY_PRUNER, chainId).(*sm.Pruner)
 
 		// State/Blocks
-		shouldStateSync := stateSyncFlagProvider(chainId).(bool)
-		stateMachine := statesProvider(chainId).(sm.State)
-		stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+		shouldStateSync := false // state-sync is disabled for nodes multiplexes
+		stateMachine := statesProvider(chainId).(*HistoricalState)
+		stateStore := stateStoreProvider(chainId).(*ChainHistoryStore)
 		blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
 
 		nodeInstance := node.NewNodeWithServices(
@@ -107,7 +106,7 @@ func (reactor *Reactor) createMultiplexNodesWithServices(
 			blockStore,
 			consensusReactor.GetState(), // cs.State
 			shouldStateSync,
-			stateMachine, // stateSyncGenesis (sm.State)
+			stateMachine.State.Copy(), // stateSyncGenesis (sm.State)
 		)
 
 		nodeInstance.BaseService = *service.NewBaseService(

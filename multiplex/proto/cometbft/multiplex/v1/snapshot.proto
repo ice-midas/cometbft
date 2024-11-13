@@ -19,7 +19,7 @@ message Metadata {
   repeated bytes chunk_hashes = 1; // SHA-256 chunk hashes
 }
 
-// SnapshotItem is an item contained in a ChainStateStore snapshot.
+// SnapshotItem is an item contained in a ChainHistoryStore snapshot.
 message SnapshotItem {
   // item is the specific type of snapshot item.
   oneof item {
@@ -27,7 +27,7 @@ message SnapshotItem {
   }
 }
 
-// SnapshotStoreItem contains an exported ChainStateStore payload.
+// SnapshotStoreItem contains an exported ChainHistoryStore payload.
 message SnapshotStoreItem {
   bytes payload = 1;
 }

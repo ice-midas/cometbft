@@ -38,7 +38,7 @@ implementation contract applies:
 - [StateSnapshotter#GetStateMachine]: Should return a copy of the [sm.State].
 - [StateSnapshotter#AppHash]: Should return the `AppHash` from loaded state.
 
-We shall provide this implementation with `ChainStateStore` in `multiplex`.
+We shall provide this implementation with `ChainHistoryStore` in `multiplex`.
 
 ## Testing
 

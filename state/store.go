@@ -214,19 +214,6 @@ func IsEmpty(store dbStore) (bool, error) {
 }
 
 func setDBKeyLayout(store *dbStore, dbKeyLayoutVersion string) string {
-	empty, _ := IsEmpty(*store)
-	if !empty {
-		version, err := store.db.Get([]byte("version"))
-		if err != nil {
-			// WARN: This is because currently cometBFT DB does not return an error if the key does not exist
-			// If this behavior changes we need to account for that.
-			panic(err)
-		}
-		if len(version) != 0 {
-			dbKeyLayoutVersion = string(version)
-		}
-	}
-
 	switch dbKeyLayoutVersion {
 	case "v1", "":
 		store.DBKeyLayout = &v1LegacyLayout{}

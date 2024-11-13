@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"slices"
 
-	snapshotstypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
+	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
 )
 
 // ----------------------------------------------------------------------------
@@ -178,13 +177,8 @@ func DrainChunks(chunks <-chan io.ReadCloser) {
 
 // ValidRestoreHeight will check height is valid for snapshot restore or not
 func ValidRestoreHeight(format uint32, height uint64) error {
-	// We manage two snapshot formats!
-	currentFormats := []uint32{
-		snapshotstypes.CurrentNetworkFormat,
-		snapshotstypes.CurrentHistoryFormat,
-	}
-	if !slices.Contains(currentFormats, format) {
-		return fmt.Errorf("format %v: %w", format, snapshotstypes.ErrUnknownFormat)
+	if format != snapshottypes.CurrentFormat {
+		return fmt.Errorf("format %v: %w", format, snapshottypes.ErrUnknownFormat)
 	}
 
 	if height == 0 {
@@ -192,7 +186,7 @@ func ValidRestoreHeight(format uint32, height uint64) error {
 	}
 	if height > uint64(math.MaxInt64) {
 		return fmt.Errorf(
-			"snapshot height %v cannot exceed %v: %w", height, int64(math.MaxInt64), snapshotstypes.ErrInvalidMetadata)
+			"snapshot height %v cannot exceed %v: %w", height, int64(math.MaxInt64), snapshottypes.ErrInvalidMetadata)
 	}
 
 	return nil

@@ -23,9 +23,10 @@ When the SnapsApp is created, the replicated chains configuration is read from
 the reactor interface, and snapshots managers are created for each of
 the replicated chains, then mapped to their respective `ChainID`.
 
-The `ChainStateStore` structure, that is retrieve from the reactor, is expected to
-satisfy the `snapshots.StateSnapshotter` interface by implementing: Snapshot(),
-Restore(), GetStateMachine() and AppHash().
+The state store structure, that is retrieved from the reactor,using
+the [GetStateSttore] method, is expected to satisfy the interface
+named `snapshots.StateSnapshotter` by implementing: Snapshot(), Restore(),
+GetStateMachine() and AppHash().
 
 The SnapsApp ABCI application delegates to the snapshots manager and the
 snapshotter implementation for the underlying processes of taking snapshots

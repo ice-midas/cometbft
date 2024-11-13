@@ -146,7 +146,7 @@ func NewNodesMultiplex(
 	//
 	// The ABCI client is created once for the nodes multiplex, and we use
 	// a breaking [proxy.ChainConns] interface rather than [proxy.AppConns].
-	snapshotsStrategy := globalCfg.SnapshotOptions[globalCfg.Strategy]
+	snapshotsStrategy := globalCfg.SnapshotOptions[HistoryReplicationStrategy()]
 	localABCISnapsApp := proxy.NewLocalClientCreator(snapsapp.NewSnapsApplication(
 		reactor,
 		snapshotsStrategy,
@@ -184,13 +184,11 @@ func NewNodesMultiplex(
 			logger.Info("Network configuration done", "chain_id", chainId)
 
 			// Used to retrieve configuration and state per chain.
-			configProvider := reactor.GetInstanceProvider(KEY_CONFIG)
 			statesProvider := reactor.GetInstanceProvider(KEY_STATE)
 			privvalProvider := reactor.GetInstanceProvider(KEY_PRIVVAL)
 
 			// The node config contains the configuration overwrite.
-			cfgOverwrite := configProvider(chainId).(*config.Config)
-			stateMachine := statesProvider(chainId).(sm.State)
+			stateMachine := statesProvider(chainId).(*HistoricalState)
 			privValidator := privvalProvider(chainId).(types.PrivValidator)
 
 			// Make sure we can access the priv validator
@@ -199,19 +197,12 @@ func NewNodesMultiplex(
 				return nil, nil, fmt.Errorf("could not read public key from priv validator: %w", err)
 			}
 
-			// Determine whether we *can* execute stateSync
-			stateSync := cfgOverwrite.StateSync.Enable &&
-				!onlyValidatorIsUs(stateMachine, privValPubKey)
-
-			// If we can't execute state-sync, we must execute a ABCI handshake
+			// Since we do not run state-sync, we must execute a ABCI handshake
 			// And following a successful handshake, we may load the state machine.
 			//
-			// e.g. This also happens on restart of a node, when it doesn't need
-			// to execute state-sync because the node is synchronized.
-			if !stateSync {
-				if err := reactor.PrepareConsensusInstanceWithReactor(ctx, chainId); err != nil {
-					return nil, nil, fmt.Errorf("error preparing consensus instance: %w", err)
-				}
+			// e.g. This also happens on restart of a node.
+			if err := reactor.PrepareConsensusInstanceWithReactor(ctx, chainId); err != nil {
+				return nil, nil, fmt.Errorf("error preparing consensus instance: %w", err)
 			}
 
 			// Inform about the state machine block height
@@ -224,15 +215,15 @@ func NewNodesMultiplex(
 			// Determine whether we should do block sync. This must happen after
 			// the handshake, since the app may modify the validator set,
 			// e.g. specifying ourself as the only validator.
-			blockSync := !onlyValidatorIsUs(stateMachine, privValPubKey)
+			blockSync := !onlyValidatorIsUs(stateMachine.State.Copy(), privValPubKey)
 
-			logNodeStartupInfo(stateMachine, privValPubKey, logger)
+			logNodeStartupInfo(stateMachine.State.Copy(), privValPubKey, logger)
 
 			// Start the actual consensus instance.
 			//
 			// Creates a mempool, evidence pool, block executor, blocksync
 			// and finally a consensus reactor.
-			if err := reactor.CreateConsensusInstanceReactors(ctx, chainId, stateSync, blockSync); err != nil {
+			if err := reactor.CreateConsensusInstanceReactors(ctx, chainId, blockSync); err != nil {
 				return nil, nil, fmt.Errorf("error starting consensus reactors: %w", err)
 			}
 
@@ -412,7 +403,7 @@ func makeNodeInfo(
 	rpcListenAddrs := make([]ChainListenAddr, countNetworks)
 	for i, chainId := range knownNetworks {
 		cfgOverwrite := configProvider(chainId).(*config.Config)
-		stateMachine := statesProvider(chainId).(sm.State)
+		stateMachine := statesProvider(chainId).(*HistoricalState)
 
 		protocolVersions[i] = NewChainProtocolVersion(chainId, p2p.NewProtocolVersion(
 			version.P2PProtocol,

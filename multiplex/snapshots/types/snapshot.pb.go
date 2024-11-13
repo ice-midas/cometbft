@@ -145,7 +145,7 @@ func (m *Metadata) GetChunkHashes() [][]byte {
 	return nil
 }
 
-// SnapshotItem is an item contained in a ChainStateStore snapshot.
+// SnapshotItem is an item contained in a ChainHistoryStore snapshot.
 type SnapshotItem struct {
 	// item is the specific type of snapshot item.
 	//
@@ -221,7 +221,7 @@ func (*SnapshotItem) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-// SnapshotStoreItem contains an exported ChainStateStore payload.
+// SnapshotStoreItem contains an exported ChainHistoryStore payload.
 type SnapshotStoreItem struct {
 	Payload []byte `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
 }

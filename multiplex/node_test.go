@@ -410,7 +410,7 @@ func ResetTestMultiplexNode(t testing.TB, numChains int) (string, *config.Config
 	globalCfg.SetRoot(rootDir)
 	globalCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
 
-	// Make sure we *disable* state-sync ("new network", "first block")
+	// We always *disable* state-sync for network nodes
 	for chainId, _ := range globalCfg.SyncConfig {
 		// Forcefully disable state-sync
 		globalCfg.SyncConfig[chainId].Enable = false

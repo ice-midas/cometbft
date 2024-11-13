@@ -8,7 +8,7 @@ import "context"
 // We provide an example [DefaultSnapshotMutationExtension] implementation for the
 // extensionFn parameter which only copies the state machine instance.
 //
-// This method is called by [multiplex.ChainStateStore] and may be used to
+// This method is called by [multiplex.ChainHistoryStore] and may be used to
 // mutate state instances *before* they are snapshotted and saved to disk.
 //
 // Note that we inject `Address` and `ChainID` in the Context before calling
@@ -40,7 +40,7 @@ func InjectSnapshotMutation(
 // We provide an example [DefaultCheckMutationResultExtension] implementation for the
 // extensionFn parameter which always returns nil (no errors).
 //
-// This method is called by [multiplex.ChainStateStore] and may be used to
+// This method is called by [multiplex.ChainHistoryStore] and may be used to
 // audit state instance mutations *before* they are snapshotted and saved to disk.
 //
 // Note that we inject `Address` and `ChainID` in the Context before calling
@@ -71,7 +71,7 @@ func AuditMutationResult(
 // We provide an example [DefaultSnapshotRestoreExtension] implementation for the
 // extensionFn parameter which only copies the state machine instance.
 //
-// This method is called by [multiplex.ChainStateStore] and may be used to
+// This method is called by [multiplex.ChainHistoryStore] and may be used to
 // mutate state instances *before* they are restored to the state machine.
 //
 // Note that we inject `Address` and `ChainID` in the Context before calling

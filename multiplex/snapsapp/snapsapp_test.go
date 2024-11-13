@@ -149,7 +149,7 @@ func makeState(
 	t *testing.T,
 	chainId string,
 	setHeight int64,
-) (sm.State, []byte) {
+) (*mx.HistoricalState, []byte) {
 	t.Helper()
 
 	valPubKey := ed25519.GenPrivKey().PubKey()
@@ -176,5 +176,8 @@ func makeState(
 	state.LastBlockTime = cmttime.Now()
 	state.LastValidators = state.Validators
 
-	return state, state.AppHash
+	return &mx.HistoricalState{
+		State: &state,
+		Data:  []byte{},
+	}, state.AppHash
 }

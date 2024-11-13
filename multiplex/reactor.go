@@ -45,7 +45,6 @@ const (
 	KEY_DB_BF          = "database/evidence"   // BF=Byzantine Fault
 	KEY_P2P_SWITCH     = "p2p/switch"
 	KEY_P2P_TRANSPORT  = "p2p/transport"
-	KEY_FLAG_STATESYNC = "flag/stateSync"
 	KEY_FLAG_BLOCKSYNC = "flag/blockSync"
 
 	// Services types
@@ -54,7 +53,6 @@ const (
 	KEY_PRUNER            = "pruner"
 	KEY_REACTOR_MEMPOOL   = "reactor/mempool"
 	KEY_REACTOR_BLOCKSYNC = "reactor/blockSync"
-	KEY_REACTOR_STATESYNC = "reactor/stateSync"
 	KEY_REACTOR_CONSENSUS = "reactor/consensus"
 	KEY_REACTOR_EVIDENCE  = "reactor/evidence"
 )
@@ -119,8 +117,9 @@ type Reactor struct {
 	multiplexRegistry NamedMultiplexMap[any]
 
 	// Internal
-	logger       cmtlog.Logger
-	chainReadyCh chan string
+	logger          cmtlog.Logger
+	chainReadyCh    chan string
+	filesystemMutex sync.Mutex
 }
 
 // NewReactor creates a new multiplex reactor around a [p2p.NodeKey],
@@ -343,7 +342,7 @@ func (r *Reactor) RegisterInstance(
 // - `config`: the configuration overwrite for each network.
 // - `storage`: the filesystem paths for each network.
 // - `state`: the [sm.State] state machine instances (InitMultiplexStates).
-// - `stateStore`: the [ChainStateStore] instance attached (InitMultiplexStates).
+// - `stateStore`: the [ChainHistoryStore] instance attached (InitMultiplexStates).
 // - `database/blockstore`: the blockstore databases (initMultiplexDatabases).
 // - `database/state`: the state machine databases (initMultiplexDatabases).
 // - `database/tx_index`: the tx_index databases (initMultiplexDatabases).
@@ -580,7 +579,7 @@ func (r *Reactor) startNodeListeners(chainId string) error {
 	// Casting to ChainInstance before is required because the *instanceProviderFn*
 	// implementation provides a `any` typed variable which is not an interface.
 	nodeConfig := configProvider(chainId).(*config.Config)
-	stateStore := stateStoreProvider(chainId).(*ChainStateStore)
+	stateStore := stateStoreProvider(chainId).(*ChainHistoryStore)
 	blockStore := blockStoreProvider(chainId).(*bs.BlockStore)
 
 	// We can safely ignore the error as we know an address is available.
@@ -601,6 +600,7 @@ func (r *Reactor) startNodeListeners(chainId string) error {
 		return fmt.Errorf("error starting event bus: %w", err)
 	}
 
+	r.filesystemMutex.Lock()
 	// 2) Priv Validator Service
 	//
 	// Uses a separate priv validator for each supported network to prevent
@@ -618,6 +618,7 @@ func (r *Reactor) startNodeListeners(chainId string) error {
 			return ed25519.GenPrivKey(), nil
 		},
 	)
+	r.filesystemMutex.Unlock()
 	if err != nil {
 		return err
 	}

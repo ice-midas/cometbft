@@ -313,7 +313,7 @@ func (info MultiNetworkNodeInfo) ToProto() *mxp2p.MultiNetworkNodeInfo {
 
 	// Mismatch in sizes should never happen here
 	if numReplicatedChains != numVersions {
-		panic(fmt.Sprintf("found inconsisten number of replicated chains, Got %d networks and %d versions",
+		panic(fmt.Sprintf("found inconsistent number of replicated chains, got %d networks and %d versions",
 			numReplicatedChains, numVersions))
 	}
 
