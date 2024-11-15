@@ -403,12 +403,25 @@ func TestMultiplexNodeNewNodesMultiplexProduceBlocks(t *testing.T) {
 func ResetTestMultiplexNode(t testing.TB, numChains int) (string, *config.Config) {
 	t.Helper()
 
+	// Uses a random multiplex configuration
+	return ResetTestMultiplexNodeWithConfig(t,
+		makeRandomMultiplexConfig(t, numChains),
+	)
+}
+
+// This method resets a nodes multiplex' filesystem and configuration.
+func ResetTestMultiplexNodeWithConfig(
+	t testing.TB,
+	nodesMultiplexConfig config.MultiplexConfig,
+) (string, *config.Config) {
+	t.Helper()
+
 	rootDir, err := os.MkdirTemp("", t.Name())
 	require.NoError(t, err)
 
 	globalCfg := config.TestConfig()
 	globalCfg.SetRoot(rootDir)
-	globalCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
+	globalCfg.MultiplexConfig = nodesMultiplexConfig
 
 	// We always *disable* state-sync for network nodes
 	for chainId, _ := range globalCfg.SyncConfig {
@@ -502,23 +515,30 @@ func useDefaultKeyGenFunc() func() (crypto.PrivKey, error) {
 	}
 }
 
-// assertStartNodesMultiplex configures a nodes multiplex *randomly* and starts
-// individual nodes in a separate goroutine per network.
-func assertStartNodesMultiplex(t testing.TB, numChains int, customLogger cmtlog.Logger) (
+// assertStartNodesMultiplexWithConfig configures a nodes multiplex using the
+// provided configuration and starts individual nodes in a separate goroutine
+// per network.
+func assertStartNodesMultiplexWithConfig(
+	t testing.TB,
+	nodesMultiplexConfig config.MultiplexConfig,
+	customLogger cmtlog.Logger,
+	metricsPrefix string,
+	forceChainSeeds string,
+) (
 	*config.Config,
 	mx.MultiplexMap[*node.Node],
 	*mx.Reactor,
 ) {
-	_, globalCfg := ResetTestMultiplexNode(t, numChains)
+	_, globalCfg := ResetTestMultiplexNodeWithConfig(t, nodesMultiplexConfig)
 
 	// Forces multi-test allowance, disables GRPC
-	globalCfg.Instrumentation.Namespace = "cometbft:" + t.Name()
+	globalCfg.Instrumentation.Namespace = metricsPrefix
 	globalCfg.GRPC.ListenAddress = ""            // disabled GRPC
 	globalCfg.GRPC.Privileged.ListenAddress = "" // disabled GRPC
 
 	// Seeds must be valid (or empty), otherwise dialing will fail
 	for chainId, _ := range globalCfg.ChainSeeds {
-		globalCfg.ChainSeeds[chainId] = ""
+		globalCfg.ChainSeeds[chainId] = forceChainSeeds
 	}
 
 	if customLogger == nil {
@@ -533,9 +553,11 @@ func assertStartNodesMultiplex(t testing.TB, numChains int, customLogger cmtlog.
 		customLogger,
 	)
 	require.NoError(t, err, "should create node instance")
+
+	expectedNumChains := len(testReactor.GetNetworks())
 	require.NotNil(t, testMultiplex, "should return a multiplex map with a node")
-	require.Len(t, testMultiplex, numChains, fmt.Sprintf(
-		"should contain exactly %d networks", numChains))
+	require.Len(t, testMultiplex, expectedNumChains, fmt.Sprintf(
+		"should contain exactly %d networks", expectedNumChains))
 
 	// Reset wait group for every iteration
 	wg := sync.WaitGroup{}
@@ -569,6 +591,21 @@ func assertStartNodesMultiplex(t testing.TB, numChains int, customLogger cmtlog.
 	wg.Wait()
 
 	return globalCfg, testMultiplex, testReactor
+}
+
+// assertStartNodesMultiplex configures a nodes multiplex *randomly* and starts
+// individual nodes in a separate goroutine per network.
+func assertStartNodesMultiplex(t testing.TB, numChains int, customLogger cmtlog.Logger) (
+	*config.Config,
+	mx.MultiplexMap[*node.Node],
+	*mx.Reactor,
+) {
+	return assertStartNodesMultiplexWithConfig(t,
+		makeRandomMultiplexConfig(t, numChains),
+		customLogger,
+		"cometbft:"+t.Name(), // prometheus metrics
+		"",                   // forces empty ChainSeeds
+	)
 }
 
 func usePrivValidatorFromFiles(

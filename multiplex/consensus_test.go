@@ -130,6 +130,8 @@ func ResetTestMultiplexConsensus(
 	nodeCfg.MultiplexConfig = makeRandomMultiplexConfig(t, numChains)
 	mockGenesisProvider := mockMultiplexGenesisDocProviderFunc(&nodeCfg.MultiplexConfig, numChains)
 
+	nodeCfg.Instrumentation.Namespace = "cometbft:" + t.Name()
+
 	// Create a test reactor
 	reactor := makeTestReactorWithGenesisDocProvider(t, nodeCfg, mockGenesisProvider)
 
