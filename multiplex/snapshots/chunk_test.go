@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/multiplex/snapshots"
+	"github.com/ice-blockchain/cometbft/multiplex/snapshots"
 )
 
 func TestChunkWriter(t *testing.T) {

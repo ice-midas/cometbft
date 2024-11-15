@@ -3,9 +3,9 @@ package indexer
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/libs/pubsub/query"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/pubsub/query"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 //go:generate ../../scripts/mockery_generate.sh BlockIndexer

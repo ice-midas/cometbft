@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cometbft/cometbft/crypto/tmhash"
+	"github.com/ice-blockchain/cometbft/crypto/tmhash"
 )
 
 var (

@@ -3,11 +3,11 @@ package proxy
 import (
 	"fmt"
 
-	abcicli "github.com/cometbft/cometbft/abci/client"
-	cmtos "github.com/cometbft/cometbft/internal/os"
-	cmtlog "github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/libs/service"
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
+	abcicli "github.com/ice-blockchain/cometbft/abci/client"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
+	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
 )
 
 // -----------------------------------------------------------------------------------------

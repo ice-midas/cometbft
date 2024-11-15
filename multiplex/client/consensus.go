@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	v1 "github.com/cometbft/cometbft/api/cometbft/types/v1"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	v1 "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
 )
 
 // ReportValidatorUpdate defines a callback that returns nil or an error if

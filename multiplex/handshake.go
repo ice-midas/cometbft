@@ -4,9 +4,9 @@ import (
 	"net"
 	"time"
 
-	mxp2p "github.com/cometbft/cometbft/api/cometbft/multiplex/v1"
-	"github.com/cometbft/cometbft/libs/protoio"
-	"github.com/cometbft/cometbft/p2p"
+	mxp2p "github.com/ice-blockchain/cometbft/api/cometbft/multiplex/v1"
+	"github.com/ice-blockchain/cometbft/libs/protoio"
+	"github.com/ice-blockchain/cometbft/p2p"
 )
 
 // MultiplexTransportHandshake implements [p2p.TransportHandshakeFn] to permit using

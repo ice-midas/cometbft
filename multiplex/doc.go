@@ -278,7 +278,7 @@ the legacy `cometbft.p2p.v1.NodeInfo`.
 			--gogofaster_out=api/ \
 			multiplex/proto/cometbft/multiplex/v1/types.proto
 
-	mv api/github.com/cometbft/cometbft/* api/cometbft/
+	mv api/github.com/ice-blockchain/cometbft/* api/cometbft/
 	rm -rf api/github.com
 
 ## Snapshot
@@ -304,7 +304,7 @@ Notable methods implementation include, but are not limited to:
 			--gogofaster_out=api/ \
 			multiplex/proto/cometbft/multiplex/v1/snapshot.proto
 
-	mv api/github.com/cometbft/cometbft/multiplex/snapshots/types/* multiplex/snapshots/types/
+	mv api/github.com/ice-blockchain/cometbft/multiplex/snapshots/types/* multiplex/snapshots/types/
 	rm -rf api/github.com
 
 # Testing
@@ -313,27 +313,27 @@ Multiple unit test suites are provided with the `multiplex` package. You can
 run one of these full unit test suites with the following commands:
 
 	# running the full unit test suites
-	go test github.com/cometbft/cometbft/multiplex -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapshots -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapsapp -test.v
-	go test github.com/cometbft/cometbft/multiplex/client -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapshots -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapsapp -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/client -test.v
 
 Alternatively, you can also run individual unit tests or unit test suites
 using one of the following commands:
 
 	# running individual unit test suites
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexGenesis.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexDB.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexFS.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexExtendedChainID.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexChainState.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexReactor.* -test.v
-	go test github.com/cometbft/cometbft/multiplex -run TestMultiplexP2P.* -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapshots -run TestChunk.* -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapshots -run TestManager.* -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapshots -run TestSnapshot.* -test.v
-	go test github.com/cometbft/cometbft/multiplex/snapsapp -run TestABCI.* -test.v
-	go test github.com/cometbft/cometbft/multiplex/client -run TestMultiplexClient.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexGenesis.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexDB.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexFS.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexExtendedChainID.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexChainState.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexReactor.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex -run TestMultiplexP2P.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapshots -run TestChunk.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapshots -run TestManager.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapshots -run TestSnapshot.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/snapsapp -run TestABCI.* -test.v
+	go test github.com/ice-blockchain/cometbft/multiplex/client -run TestMultiplexClient.* -test.v
 
 # Runtime
 
@@ -375,8 +375,8 @@ commited to the upstream branch as listed here: [cometbft-v1x].
 [snapshots]: https://github.com/ice-midas/cometbft/tree/feat/multiplex/multiplex/snapshots/
 [snapsapp]: https://github.com/ice-midas/cometbft/tree/feat/multiplex/multiplex/snapsapp/
 [client]: https://github.com/ice-midas/cometbft/tree/feat/multiplex/multiplex/client/
-[CometBFT]: https://github.com/cometbft/cometbft/tree/v1.x/README.md
-[cometbft-v1x]: https://github.com/cometbft/cometbft/commits/v1.x/
+[CometBFT]: https://github.com/ice-blockchain/cometbft/tree/v1.x/README.md
+[cometbft-v1x]: https://github.com/ice-blockchain/cometbft/commits/v1.x/
 [cometbft-statesync]: https://medium.com/cometbft/cometbft-core-state-sync-for-developers-70a96ba3ee35
 [cometbft-abci]: https://docs.cometbft.com/v1.0/explanation/core/state-sync
 [cometbft-abcimethods]: https://docs.cometbft.com/v1.0/spec/abci/abci++_basic_concepts#state-sync-methods

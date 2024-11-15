@@ -3,8 +3,8 @@
 package commented
 
 import (
-	"github.com/cometbft/cometbft/libs/metrics/discard"
-	prometheus "github.com/cometbft/cometbft/libs/metrics/prometheus"
+	"github.com/ice-blockchain/cometbft/libs/metrics/discard"
+	prometheus "github.com/ice-blockchain/cometbft/libs/metrics/prometheus"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 )
 

@@ -1,6 +1,6 @@
 package types
 
-import cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
+import cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
 
 type SignedMsgType = cmtproto.SignedMsgType
 

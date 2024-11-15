@@ -7,7 +7,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 
-	"github.com/cometbft/cometbft/abci/tutorials/abci-v2-forum-app/model"
+	"github.com/ice-blockchain/cometbft/abci/tutorials/abci-v2-forum-app/model"
 )
 
 type AppState struct {

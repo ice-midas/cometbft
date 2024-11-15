@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	cmtos "github.com/cometbft/cometbft/internal/os"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
 )
 
 func TestSIGHUP(t *testing.T) {

@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmtnet "github.com/cometbft/cometbft/internal/net"
-	cmtos "github.com/cometbft/cometbft/internal/os"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/privval"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	cmtnet "github.com/ice-blockchain/cometbft/internal/net"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/privval"
 )
 
 func main() {

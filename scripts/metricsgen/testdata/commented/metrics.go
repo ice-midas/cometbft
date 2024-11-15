@@ -1,6 +1,6 @@
 package commented
 
-import "github.com/cometbft/cometbft/libs/metrics"
+import "github.com/ice-blockchain/cometbft/libs/metrics"
 
 //go:generate go run ../../../../scripts/metricsgen -struct=Metrics
 

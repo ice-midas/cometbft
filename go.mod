@@ -1,4 +1,4 @@
-module github.com/cometbft/cometbft
+module github.com/ice-blockchain/cometbft
 
 go 1.23.1
 

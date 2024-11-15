@@ -1,8 +1,8 @@
 package batch
 
 import (
-	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/ice-blockchain/cometbft/crypto"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
 )
 
 // CreateBatchVerifier checks if a key type implements the batch verifier interface.

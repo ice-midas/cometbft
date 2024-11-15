@@ -1,7 +1,7 @@
 package multiplex
 
 import (
-	"github.com/cometbft/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
 
 // GetSyncConfigExtension returns the active configuration extension for state-sync.

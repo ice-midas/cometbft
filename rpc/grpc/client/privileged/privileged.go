@@ -8,7 +8,7 @@ import (
 	ggrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	cmtnet "github.com/cometbft/cometbft/internal/net"
+	cmtnet "github.com/ice-blockchain/cometbft/internal/net"
 )
 
 type Option func(*clientBuilder)

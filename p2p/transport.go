@@ -10,11 +10,11 @@ import (
 	"github.com/cosmos/gogoproto/proto"
 	"golang.org/x/net/netutil"
 
-	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
-	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/libs/protoio"
-	"github.com/cometbft/cometbft/libs/service"
-	"github.com/cometbft/cometbft/p2p/conn"
+	tmp2p "github.com/ice-blockchain/cometbft/api/cometbft/p2p/v1"
+	"github.com/ice-blockchain/cometbft/crypto"
+	"github.com/ice-blockchain/cometbft/libs/protoio"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	"github.com/ice-blockchain/cometbft/p2p/conn"
 )
 
 const (

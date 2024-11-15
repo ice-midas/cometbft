@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
-	cmtmath "github.com/cometbft/cometbft/libs/math"
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
-	"github.com/cometbft/cometbft/light/provider"
-	"github.com/cometbft/cometbft/light/store"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	cmtmath "github.com/ice-blockchain/cometbft/libs/math"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
+	"github.com/ice-blockchain/cometbft/light/provider"
+	"github.com/ice-blockchain/cometbft/light/store"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 type mode byte
@@ -502,7 +502,7 @@ func (c *Client) VerifyLightBlockAtHeight(ctx context.Context, height int64, now
 // headers are not adjacent, verifySkipping is performed and necessary (not all)
 // intermediate headers will be requested. See the specification for details.
 // Intermediate headers are not saved to database.
-// https://github.com/cometbft/cometbft/blob/main/spec/consensus/light-client.md
+// https://github.com/ice-blockchain/cometbft/blob/main/spec/consensus/light-client.md
 //
 // If the header, which is older than the currently trusted header, is
 // requested and the light client does not have it, VerifyHeader will perform:

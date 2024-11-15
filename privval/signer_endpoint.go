@@ -5,10 +5,10 @@ import (
 	"net"
 	"time"
 
-	privvalproto "github.com/cometbft/cometbft/api/cometbft/privval/v1"
-	"github.com/cometbft/cometbft/libs/protoio"
-	"github.com/cometbft/cometbft/libs/service"
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
+	privvalproto "github.com/ice-blockchain/cometbft/api/cometbft/privval/v1"
+	"github.com/ice-blockchain/cometbft/libs/protoio"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
 )
 
 const (

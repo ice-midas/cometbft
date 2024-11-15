@@ -6,11 +6,11 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	"github.com/cometbft/cometbft/internal/clist"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/types"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	"github.com/ice-blockchain/cometbft/internal/clist"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 const (

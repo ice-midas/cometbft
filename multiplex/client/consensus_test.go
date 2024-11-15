@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	v1 "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	v1 "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	cmtjson "github.com/ice-blockchain/cometbft/libs/json"
 
-	"github.com/cometbft/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
 
 const testValidatorJSON = `{

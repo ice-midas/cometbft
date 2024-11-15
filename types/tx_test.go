@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	cmtrand "github.com/cometbft/cometbft/internal/rand"
-	ctest "github.com/cometbft/cometbft/libs/test"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	cmtrand "github.com/ice-blockchain/cometbft/internal/rand"
+	ctest "github.com/ice-blockchain/cometbft/libs/test"
 )
 
 func makeTxs(cnt, size int) Txs {

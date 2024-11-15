@@ -1,8 +1,8 @@
 package proxy
 
 import (
-	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/version"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	"github.com/ice-blockchain/cometbft/version"
 )
 
 // InfoRequest contains all the information for sending

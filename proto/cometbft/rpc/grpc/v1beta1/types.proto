@@ -1,6 +1,6 @@
 syntax = "proto3";
 package cometbft.rpc.grpc.v1beta1;
-option  go_package = "github.com/cometbft/cometbft/api/cometbft/rpc/grpc/v1beta1";
+option  go_package = "github.com/ice-blockchain/cometbft/api/cometbft/rpc/grpc/v1beta1";
 
 import "cometbft/abci/v1beta1/types.proto";
 

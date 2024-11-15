@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/cometbft/cometbft/config"
-	cmtos "github.com/cometbft/cometbft/internal/os"
-	cmtrand "github.com/cometbft/cometbft/internal/rand"
+	"github.com/ice-blockchain/cometbft/config"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
+	cmtrand "github.com/ice-blockchain/cometbft/internal/rand"
 
-	mx "github.com/cometbft/cometbft/multiplex"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
 )
 
 func TestMultiplexDBChainID(t *testing.T) {

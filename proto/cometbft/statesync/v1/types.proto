@@ -1,7 +1,7 @@
 syntax = "proto3";
 package cometbft.statesync.v1;
 
-option go_package = "github.com/cometbft/cometbft/api/cometbft/statesync/v1";
+option go_package = "github.com/ice-blockchain/cometbft/api/cometbft/statesync/v1";
 
 // Message is the top-level message type for the statesync service.
 message Message {

@@ -7,7 +7,7 @@ import (
 	"io"
 	"math"
 
-	snapshottypes "github.com/cometbft/cometbft/multiplex/snapshots/types"
+	snapshottypes "github.com/ice-blockchain/cometbft/multiplex/snapshots/types"
 )
 
 // ----------------------------------------------------------------------------

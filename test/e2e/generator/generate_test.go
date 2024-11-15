@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
+	e2e "github.com/ice-blockchain/cometbft/test/e2e/pkg"
 )
 
 // TestGenerator tests that only valid manifests are generated.

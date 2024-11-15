@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/cometbft/cometbft/config"
+	"github.com/ice-blockchain/cometbft/config"
 )
 
 // ----------------------------------------------------------------------------

@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 
-	abcitypes "github.com/cometbft/cometbft/api/cometbft/abci/v1"
+	abcitypes "github.com/ice-blockchain/cometbft/api/cometbft/abci/v1"
 	proto "github.com/cosmos/gogoproto/proto"
 )
 

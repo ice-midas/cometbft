@@ -9,9 +9,9 @@ import (
 	"log"
 	"testing"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/internal/async"
-	sc "github.com/cometbft/cometbft/p2p/conn"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	"github.com/ice-blockchain/cometbft/internal/async"
+	sc "github.com/ice-blockchain/cometbft/p2p/conn"
 )
 
 func FuzzP2PSecretConnection(f *testing.F) {

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cometbft/cometbft/light/provider"
-	rpcclient "github.com/cometbft/cometbft/rpc/client"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/light/provider"
+	rpcclient "github.com/ice-blockchain/cometbft/rpc/client"
+	rpchttp "github.com/ice-blockchain/cometbft/rpc/client/http"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 var (
@@ -179,7 +179,7 @@ func (p *http) signedHeader(ctx context.Context, height *int64) (*types.SignedHe
 		commit, err := p.client.Commit(ctx, height)
 		switch {
 		case err == nil:
-			// See https://github.com/cometbft/cometbft/issues/575
+			// See https://github.com/ice-blockchain/cometbft/issues/575
 			// If the node is starting at a non-zero height, but does not yet
 			// have any blocks, it can return an empty signed header without
 			// returning an error.

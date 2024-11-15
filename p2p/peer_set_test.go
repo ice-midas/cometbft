@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/libs/service"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	"github.com/ice-blockchain/cometbft/libs/service"
 )
 
 // mockPeer for testing the PeerSet.

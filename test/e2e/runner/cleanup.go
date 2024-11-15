@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
-	"github.com/cometbft/cometbft/test/e2e/pkg/exec"
-	"github.com/cometbft/cometbft/test/e2e/pkg/infra/docker"
+	e2e "github.com/ice-blockchain/cometbft/test/e2e/pkg"
+	"github.com/ice-blockchain/cometbft/test/e2e/pkg/exec"
+	"github.com/ice-blockchain/cometbft/test/e2e/pkg/infra/docker"
 )
 
 // Cleanup removes the Docker Compose containers and testnet directory.

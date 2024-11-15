@@ -13,7 +13,7 @@ import (
 	kitlevel "github.com/go-kit/log/level"
 	"github.com/go-logfmt/logfmt"
 
-	cmttime "github.com/cometbft/cometbft/types/time"
+	cmttime "github.com/ice-blockchain/cometbft/types/time"
 )
 
 type tmfmtEncoder struct {

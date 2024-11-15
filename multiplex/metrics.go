@@ -3,7 +3,7 @@ package multiplex
 import (
 	"time"
 
-	"github.com/cometbft/cometbft/libs/metrics"
+	"github.com/ice-blockchain/cometbft/libs/metrics"
 )
 
 // addTimeSample returns a function that, when called, adds an observation to m.

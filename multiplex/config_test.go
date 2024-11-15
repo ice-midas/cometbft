@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/config"
-	mx "github.com/cometbft/cometbft/multiplex"
+	"github.com/ice-blockchain/cometbft/config"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
 )
 
 func TestMultiplexConfigDefaultLegacyFallback(t *testing.T) {

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"reflect"
 
-	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
-	cmtstrings "github.com/cometbft/cometbft/internal/strings"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
-	"github.com/cometbft/cometbft/version"
+	tmp2p "github.com/ice-blockchain/cometbft/api/cometbft/p2p/v1"
+	cmtstrings "github.com/ice-blockchain/cometbft/internal/strings"
+	cmtbytes "github.com/ice-blockchain/cometbft/libs/bytes"
+	"github.com/ice-blockchain/cometbft/version"
 )
 
 const (

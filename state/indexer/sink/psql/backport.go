@@ -17,11 +17,11 @@ import (
 	"context"
 	"errors"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/libs/pubsub/query"
-	"github.com/cometbft/cometbft/state/txindex"
-	"github.com/cometbft/cometbft/types"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/pubsub/query"
+	"github.com/ice-blockchain/cometbft/state/txindex"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // TxIndexer returns a bridge from es to the CometBFT v0.34 transaction indexer.

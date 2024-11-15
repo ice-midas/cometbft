@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	cmtstate "github.com/cometbft/cometbft/api/cometbft/state/v1"
-	cmtversion "github.com/cometbft/cometbft/api/cometbft/version/v1"
-	"github.com/cometbft/cometbft/version"
+	cmtstate "github.com/ice-blockchain/cometbft/api/cometbft/state/v1"
+	cmtversion "github.com/ice-blockchain/cometbft/api/cometbft/version/v1"
+	"github.com/ice-blockchain/cometbft/version"
 )
 
 // Rollback overwrites the current CometBFT state (height n) with the most

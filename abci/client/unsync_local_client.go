@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/libs/service"
+	"github.com/ice-blockchain/cometbft/abci/types"
+	"github.com/ice-blockchain/cometbft/libs/service"
 )
 
 type unsyncLocalClient struct {

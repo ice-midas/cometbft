@@ -4,8 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // mempoolTx is an entry in the mempool.

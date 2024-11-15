@@ -16,28 +16,28 @@ import (
 	_ "github.com/lib/pq" //nolint: gci // provide the psql db driver.
 
 	dbm "github.com/cometbft/cometbft-db"
-	abci "github.com/cometbft/cometbft/abci/types"
-	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/tmhash"
-	"github.com/cometbft/cometbft/internal/blocksync"
-	cs "github.com/cometbft/cometbft/internal/consensus"
-	"github.com/cometbft/cometbft/internal/evidence"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/light"
-	mempl "github.com/cometbft/cometbft/mempool"
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/p2p/pex"
-	"github.com/cometbft/cometbft/privval"
-	"github.com/cometbft/cometbft/proxy"
-	sm "github.com/cometbft/cometbft/state"
-	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/indexer/block"
-	"github.com/cometbft/cometbft/state/txindex"
-	"github.com/cometbft/cometbft/statesync"
-	"github.com/cometbft/cometbft/store"
-	"github.com/cometbft/cometbft/types"
-	"github.com/cometbft/cometbft/version"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	cfg "github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/crypto"
+	"github.com/ice-blockchain/cometbft/crypto/tmhash"
+	"github.com/ice-blockchain/cometbft/internal/blocksync"
+	cs "github.com/ice-blockchain/cometbft/internal/consensus"
+	"github.com/ice-blockchain/cometbft/internal/evidence"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/light"
+	mempl "github.com/ice-blockchain/cometbft/mempool"
+	"github.com/ice-blockchain/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/p2p/pex"
+	"github.com/ice-blockchain/cometbft/privval"
+	"github.com/ice-blockchain/cometbft/proxy"
+	sm "github.com/ice-blockchain/cometbft/state"
+	"github.com/ice-blockchain/cometbft/state/indexer"
+	"github.com/ice-blockchain/cometbft/state/indexer/block"
+	"github.com/ice-blockchain/cometbft/state/txindex"
+	"github.com/ice-blockchain/cometbft/statesync"
+	"github.com/ice-blockchain/cometbft/store"
+	"github.com/ice-blockchain/cometbft/types"
+	"github.com/ice-blockchain/cometbft/version"
 )
 
 const readHeaderTimeout = 10 * time.Second
@@ -98,7 +98,7 @@ func DefaultGenesisDocProviderFunc(config *cfg.Config) GenesisDocProvider {
 	return func() (IChecksummedGenesisDoc, error) {
 		// FIXME: find a way to stream the file incrementally,
 		// for the JSON	parser and the checksum computation.
-		// https://github.com/cometbft/cometbft/issues/1302
+		// https://github.com/ice-blockchain/cometbft/issues/1302
 		jsonBlob, err := os.ReadFile(config.GenesisFile())
 		if err != nil {
 			return &ChecksummedGenesisDoc{}, fmt.Errorf("couldn't read GenesisDoc file: %w", err)

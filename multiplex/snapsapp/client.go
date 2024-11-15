@@ -1,7 +1,7 @@
 package snapsapp
 
 import (
-	"github.com/cometbft/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
 
 // GetValidatorUpdateExtension returns the active reporting extension

@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmtnet "github.com/cometbft/cometbft/internal/net"
-	"github.com/cometbft/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	cmtnet "github.com/ice-blockchain/cometbft/internal/net"
+	"github.com/ice-blockchain/cometbft/p2p"
 
-	mx "github.com/cometbft/cometbft/multiplex"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
 )
 
 func TestMultiplexMultiNetworkNodeInfoValidate(t *testing.T) {

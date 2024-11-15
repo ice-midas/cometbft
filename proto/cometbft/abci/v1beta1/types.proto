@@ -10,7 +10,7 @@ import "cometbft/types/v1beta1/types.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/cometbft/cometbft/api/cometbft/abci/v1beta1";
+option go_package = "github.com/ice-blockchain/cometbft/api/cometbft/abci/v1beta1";
 
 // NOTE: When using custom types, mind the warnings.
 // https://github.com/cosmos/gogoproto/blob/master/custom_types.md#warnings-and-issues

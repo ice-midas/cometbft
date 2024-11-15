@@ -4,7 +4,7 @@ package cometbft.privval.v1;
 import "cometbft/types/v1/types.proto";
 import "gogoproto/gogo.proto";
 
-option go_package = "github.com/cometbft/cometbft/api/cometbft/privval/v1";
+option go_package = "github.com/ice-blockchain/cometbft/api/cometbft/privval/v1";
 
 // remotesignererror is returned when the remote signer fails.
 message RemoteSignerError {

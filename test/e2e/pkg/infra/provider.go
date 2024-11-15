@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
+	e2e "github.com/ice-blockchain/cometbft/test/e2e/pkg"
 )
 
 // Provider defines an API for manipulating the infrastructure of a

@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	abciclient "github.com/cometbft/cometbft/abci/client"
-	"github.com/cometbft/cometbft/abci/example/kvstore"
-	abciserver "github.com/cometbft/cometbft/abci/server"
+	abciclient "github.com/ice-blockchain/cometbft/abci/client"
+	"github.com/ice-blockchain/cometbft/abci/example/kvstore"
+	abciserver "github.com/ice-blockchain/cometbft/abci/server"
 )
 
 func TestClientServerNoAddrPrefix(t *testing.T) {

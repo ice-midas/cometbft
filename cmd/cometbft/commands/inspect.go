@@ -8,12 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/internal/inspect"
-	"github.com/cometbft/cometbft/state"
-	"github.com/cometbft/cometbft/state/indexer/block"
-	"github.com/cometbft/cometbft/store"
-	"github.com/cometbft/cometbft/types"
+	cfg "github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/internal/inspect"
+	"github.com/ice-blockchain/cometbft/state"
+	"github.com/ice-blockchain/cometbft/state/indexer/block"
+	"github.com/ice-blockchain/cometbft/store"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // InspectCmd is the command for starting an inspect server.

@@ -32,7 +32,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cometbft/cometbft/libs/metrics"
+	"github.com/ice-blockchain/cometbft/libs/metrics"
 )
 
 // TestCounter puts some deltas through the counter, and then calls the value

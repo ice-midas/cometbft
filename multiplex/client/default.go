@@ -3,9 +3,9 @@ package client
 import (
 	"context"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	v1 "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	"github.com/cometbft/cometbft/config"
+	abci "github.com/ice-blockchain/cometbft/abci/types"
+	v1 "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	"github.com/ice-blockchain/cometbft/config"
 )
 
 // ----------------------------------------------------------------------------

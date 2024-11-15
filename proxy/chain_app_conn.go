@@ -3,9 +3,9 @@ package proxy
 import (
 	"context"
 
-	abcicli "github.com/cometbft/cometbft/abci/client"
-	abcitypes "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/libs/service"
+	abcicli "github.com/ice-blockchain/cometbft/abci/client"
+	abcitypes "github.com/ice-blockchain/cometbft/abci/types"
+	"github.com/ice-blockchain/cometbft/libs/service"
 )
 
 // -----------------------------------------------------------------------------------------

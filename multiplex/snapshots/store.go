@@ -15,7 +15,7 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 
-	"github.com/cometbft/cometbft/multiplex/snapshots/types"
+	"github.com/ice-blockchain/cometbft/multiplex/snapshots/types"
 )
 
 const (

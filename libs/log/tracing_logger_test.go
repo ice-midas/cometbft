@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cometbft/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/log"
 )
 
 func TestTracingLogger(t *testing.T) {

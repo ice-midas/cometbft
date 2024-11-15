@@ -9,7 +9,7 @@ import "cometbft/types/v1beta2/params.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/cometbft/cometbft/api/cometbft/state/v1beta2";
+option go_package = "github.com/ice-blockchain/cometbft/api/cometbft/state/v1beta2";
 
 // ABCIResponses retains the responses
 // of the various ABCI calls during block processing.

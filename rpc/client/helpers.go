@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // Waiter is informed of current height, decided whether to quit early.

@@ -3,8 +3,8 @@ package mempool
 import (
 	"container/list"
 
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
-	"github.com/cometbft/cometbft/types"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // TxCache defines an interface for raw transaction caching in a mempool.

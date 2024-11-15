@@ -12,9 +12,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/libs/log"
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
-	"github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
+	"github.com/ice-blockchain/cometbft/rpc/jsonrpc/types"
 )
 
 var wsCallTimeout = 5 * time.Second

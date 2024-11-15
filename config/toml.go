@@ -10,7 +10,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	cmtos "github.com/cometbft/cometbft/internal/os"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
 )
 
 // DefaultDirPerm is the default permissions used when creating directories.

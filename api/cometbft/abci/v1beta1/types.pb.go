@@ -6,8 +6,8 @@ package v1beta1
 import (
 	context "context"
 	fmt "fmt"
-	v1 "github.com/cometbft/cometbft/api/cometbft/crypto/v1"
-	v1beta1 "github.com/cometbft/cometbft/api/cometbft/types/v1beta1"
+	v1 "github.com/ice-blockchain/cometbft/api/cometbft/crypto/v1"
+	v1beta1 "github.com/ice-blockchain/cometbft/api/cometbft/types/v1beta1"
 	_ "github.com/cosmos/gogoproto/gogoproto"
 	grpc1 "github.com/cosmos/gogoproto/grpc"
 	proto "github.com/cosmos/gogoproto/proto"

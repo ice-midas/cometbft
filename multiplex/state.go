@@ -3,7 +3,7 @@ package multiplex
 import (
 	"fmt"
 
-	bs "github.com/cometbft/cometbft/store"
+	bs "github.com/ice-blockchain/cometbft/store"
 )
 
 // InitMultiplexStates loads a state multiplex using the reactor's

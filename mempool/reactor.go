@@ -9,11 +9,11 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	protomem "github.com/cometbft/cometbft/api/cometbft/mempool/v1"
-	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/types"
+	protomem "github.com/ice-blockchain/cometbft/api/cometbft/mempool/v1"
+	cfg "github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // Reactor handles mempool tx broadcasting amongst peers.
@@ -266,7 +266,7 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 
 		// We are paying the cost of computing the transaction hash in
 		// any case, even when logger level > debug. So it only once.
-		// See: https://github.com/cometbft/cometbft/issues/4167
+		// See: https://github.com/ice-blockchain/cometbft/issues/4167
 		txHash := entry.Tx().Hash()
 
 		// Do not send this transaction if we receive it from peer.

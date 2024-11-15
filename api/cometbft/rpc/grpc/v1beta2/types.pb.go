@@ -6,8 +6,8 @@ package v1beta2
 import (
 	context "context"
 	fmt "fmt"
-	v1beta2 "github.com/cometbft/cometbft/api/cometbft/abci/v1beta2"
-	v1beta1 "github.com/cometbft/cometbft/api/cometbft/rpc/grpc/v1beta1"
+	v1beta2 "github.com/ice-blockchain/cometbft/api/cometbft/abci/v1beta2"
+	v1beta1 "github.com/ice-blockchain/cometbft/api/cometbft/rpc/grpc/v1beta1"
 	grpc1 "github.com/cosmos/gogoproto/grpc"
 	proto "github.com/cosmos/gogoproto/proto"
 	grpc "google.golang.org/grpc"

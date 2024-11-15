@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // Provider provides information for the light client to sync (verification

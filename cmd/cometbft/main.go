@@ -4,12 +4,12 @@ import (
 	"os"
 	"path/filepath"
 
-	cmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
-	"github.com/cometbft/cometbft/cmd/cometbft/commands/debug"
-	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/cli"
-	mx "github.com/cometbft/cometbft/multiplex"
-	nm "github.com/cometbft/cometbft/node"
+	cmd "github.com/ice-blockchain/cometbft/cmd/cometbft/commands"
+	"github.com/ice-blockchain/cometbft/cmd/cometbft/commands/debug"
+	cfg "github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/libs/cli"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
+	nm "github.com/ice-blockchain/cometbft/node"
 )
 
 func main() {

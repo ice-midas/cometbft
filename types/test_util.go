@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	cmtversion "github.com/cometbft/cometbft/api/cometbft/version/v1"
-	"github.com/cometbft/cometbft/version"
+	cmtversion "github.com/ice-blockchain/cometbft/api/cometbft/version/v1"
+	"github.com/ice-blockchain/cometbft/version"
 )
 
 func MakeExtCommit(blockID BlockID, height int64, round int32,

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cometbft/cometbft/crypto/tmhash"
+	"github.com/ice-blockchain/cometbft/crypto/tmhash"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cometbft/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
 
 func TestMultiplexClientInjectSnapshotMutation(t *testing.T) {

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	"github.com/cometbft/cometbft/crypto"
-	ce "github.com/cometbft/cometbft/crypto/encoding"
-	"github.com/cometbft/cometbft/internal/keytypes"
-	cmtrand "github.com/cometbft/cometbft/internal/rand"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	"github.com/ice-blockchain/cometbft/crypto"
+	ce "github.com/ice-blockchain/cometbft/crypto/encoding"
+	"github.com/ice-blockchain/cometbft/internal/keytypes"
+	cmtrand "github.com/ice-blockchain/cometbft/internal/rand"
 )
 
 // ErrUnsupportedPubKeyType is returned when a public key type is not supported.

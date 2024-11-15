@@ -5,7 +5,7 @@ import "cometbft/crypto/v1/keys.proto";
 import "cometbft/types/v1/types.proto";
 import "gogoproto/gogo.proto";
 
-option go_package = "github.com/cometbft/cometbft/api/cometbft/privval/v1beta2";
+option go_package = "github.com/ice-blockchain/cometbft/api/cometbft/privval/v1beta2";
 
 // Errors is a list of error codes that can be returned by the remote signer.
 enum Errors {

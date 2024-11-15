@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cometbft/cometbft/test/e2e/pkg/grammar/grammar-auto/parser/symbols"
+	"github.com/ice-blockchain/cometbft/test/e2e/pkg/grammar/grammar-auto/parser/symbols"
 )
 
 type Label int

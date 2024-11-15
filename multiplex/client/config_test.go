@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto/tmhash"
+	"github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/crypto/tmhash"
 
-	"github.com/cometbft/cometbft/multiplex/client"
+	"github.com/ice-blockchain/cometbft/multiplex/client"
 )
 
 func makeDeterministicTrustHash(input string) string {

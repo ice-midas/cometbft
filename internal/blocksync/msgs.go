@@ -5,8 +5,8 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 
-	bcproto "github.com/cometbft/cometbft/api/cometbft/blocksync/v1"
-	"github.com/cometbft/cometbft/types"
+	bcproto "github.com/ice-blockchain/cometbft/api/cometbft/blocksync/v1"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 const (
@@ -31,7 +31,7 @@ func ValidateMsg(pb proto.Message) error {
 		}
 	case *bcproto.BlockResponse:
 		// Avoid double-calling `types.BlockFromProto` for performance reasons.
-		// See https://github.com/cometbft/cometbft/issues/1964
+		// See https://github.com/ice-blockchain/cometbft/issues/1964
 		return nil
 	case *bcproto.NoBlockResponse:
 		if msg.Height < 0 {

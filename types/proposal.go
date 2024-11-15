@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
-	"github.com/cometbft/cometbft/libs/protoio"
-	cmttime "github.com/cometbft/cometbft/types/time"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	cmtbytes "github.com/ice-blockchain/cometbft/libs/bytes"
+	"github.com/ice-blockchain/cometbft/libs/protoio"
+	cmttime "github.com/ice-blockchain/cometbft/types/time"
 )
 
 var (
@@ -93,7 +93,7 @@ func (p *Proposal) ValidateBasic() error {
 // proposalReceiveTime <= proposalTimestamp + MessageDelay + Precision
 //
 // For more information on the meaning of 'timely', refer to the specification:
-// https://github.com/cometbft/cometbft/tree/main/spec/consensus/proposer-based-timestamp
+// https://github.com/ice-blockchain/cometbft/tree/main/spec/consensus/proposer-based-timestamp
 func (p *Proposal) IsTimely(recvTime time.Time, sp SynchronyParams) bool {
 	// lhs is `proposalTimestamp - Precision` in the first inequality
 	lhs := p.Timestamp.Add(-sp.Precision)

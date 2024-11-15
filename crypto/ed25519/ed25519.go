@@ -8,9 +8,9 @@ import (
 	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
 	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519/extra/cache"
 
-	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/tmhash"
-	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/ice-blockchain/cometbft/crypto"
+	"github.com/ice-blockchain/cometbft/crypto/tmhash"
+	cmtjson "github.com/ice-blockchain/cometbft/libs/json"
 )
 
 var (

@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cometbft/cometbft-load-test/pkg/loadtest"
-	"github.com/cometbft/cometbft/test/loadtime/payload"
+	"github.com/ice-blockchain/cometbft-load-test/pkg/loadtest"
+	"github.com/ice-blockchain/cometbft/test/loadtime/payload"
 )
 
 // Ensure all of the interfaces are correctly satisfied.

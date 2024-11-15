@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmtos "github.com/cometbft/cometbft/internal/os"
-	"github.com/cometbft/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
+	"github.com/ice-blockchain/cometbft/p2p"
 
-	mx "github.com/cometbft/cometbft/multiplex"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
 )
 
 func TestMultiplexChainRegistryLoadSeedsFromFile(t *testing.T) {

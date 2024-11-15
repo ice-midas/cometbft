@@ -8,11 +8,11 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 
-	"github.com/cometbft/cometbft/internal/cmap"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/libs/service"
-	cmtconn "github.com/cometbft/cometbft/p2p/conn"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/internal/cmap"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	cmtconn "github.com/ice-blockchain/cometbft/p2p/conn"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 //go:generate ../scripts/mockery_generate.sh Peer

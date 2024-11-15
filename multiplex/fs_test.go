@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cometbft/cometbft/config"
-	cmtos "github.com/cometbft/cometbft/internal/os"
+	"github.com/ice-blockchain/cometbft/config"
+	cmtos "github.com/ice-blockchain/cometbft/internal/os"
 
-	mx "github.com/cometbft/cometbft/multiplex"
+	mx "github.com/ice-blockchain/cometbft/multiplex"
 )
 
 func ResetMultiplexFSTestRoot(t *testing.T, testName string) (string, *config.Config) {

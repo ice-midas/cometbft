@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
-	"github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/p2p/mock"
-	"github.com/cometbft/cometbft/types"
+	tmp2p "github.com/ice-blockchain/cometbft/api/cometbft/p2p/v1"
+	"github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/p2p"
+	"github.com/ice-blockchain/cometbft/p2p/mock"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 var cfg *config.P2PConfig
@@ -308,7 +308,7 @@ func TestConnectionSpeedForPeerReceivedFromSeed(t *testing.T) {
 	assertPeersWithTimeout(t, []*p2p.Switch{node}, 1*time.Second, cfg.MaxNumOutboundPeers)
 
 	// 6. Assert that the configured maximum number of inbound/outbound peers
-	// are respected, see https://github.com/cometbft/cometbft/issues/486
+	// are respected, see https://github.com/ice-blockchain/cometbft/issues/486
 	outbound, inbound, dialing := node.NumPeers()
 	assert.LessOrEqual(t, inbound, cfg.MaxNumInboundPeers)
 	assert.LessOrEqual(t, outbound, cfg.MaxNumOutboundPeers)

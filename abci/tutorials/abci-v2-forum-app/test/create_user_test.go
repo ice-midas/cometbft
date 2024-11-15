@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cometbft/cometbft/abci/tutorials/abci-v2-forum-app/model"
+	"github.com/ice-blockchain/cometbft/abci/tutorials/abci-v2-forum-app/model"
 )
 
 func TestCreateUser(t *testing.T) {

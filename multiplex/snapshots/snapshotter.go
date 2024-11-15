@@ -3,8 +3,8 @@ package snapshots
 import (
 	protoio "github.com/cosmos/gogoproto/io"
 
-	"github.com/cometbft/cometbft/multiplex/snapshots/types"
-	sm "github.com/cometbft/cometbft/state"
+	"github.com/ice-blockchain/cometbft/multiplex/snapshots/types"
+	sm "github.com/ice-blockchain/cometbft/state"
 )
 
 // StateSnapshotter defines an API for creating and restoring snapshots of the

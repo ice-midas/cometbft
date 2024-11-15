@@ -6,9 +6,9 @@ import (
 
 	"github.com/cosmos/gogoproto/grpc"
 
-	blocksvc "github.com/cometbft/cometbft/api/cometbft/services/block/v1"
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	"github.com/cometbft/cometbft/types"
+	blocksvc "github.com/ice-blockchain/cometbft/api/cometbft/services/block/v1"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // Block data returned by the CometBFT BlockService gRPC API.

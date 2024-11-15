@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
-	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/crypto/secp256k1"
-	cmtrand "github.com/cometbft/cometbft/internal/rand"
-	cmtmath "github.com/cometbft/cometbft/libs/math"
+	cmtproto "github.com/ice-blockchain/cometbft/api/cometbft/types/v1"
+	"github.com/ice-blockchain/cometbft/crypto"
+	"github.com/ice-blockchain/cometbft/crypto/ed25519"
+	"github.com/ice-blockchain/cometbft/crypto/secp256k1"
+	cmtrand "github.com/ice-blockchain/cometbft/internal/rand"
+	cmtmath "github.com/ice-blockchain/cometbft/libs/math"
 )
 
 func TestValidatorSetBasic(t *testing.T) {

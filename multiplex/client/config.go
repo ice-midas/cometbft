@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/config"
+	"github.com/ice-blockchain/cometbft/config"
 )
 
 // InjectSyncConfig defines a callback that returns a map with state-sync

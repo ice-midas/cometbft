@@ -10,10 +10,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/cometbft/cometbft/config"
-	cmtlog "github.com/cometbft/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/config"
+	cmtlog "github.com/ice-blockchain/cometbft/libs/log"
 
-	"github.com/cometbft/cometbft/multiplex/snapshots/types"
+	"github.com/ice-blockchain/cometbft/multiplex/snapshots/types"
 )
 
 // ----------------------------------------------------------------------------

@@ -8,8 +8,8 @@ It contains two server implementation:
 package server
 
 import (
-	"github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/libs/service"
+	"github.com/ice-blockchain/cometbft/abci/types"
+	"github.com/ice-blockchain/cometbft/libs/service"
 )
 
 // NewServer is a utility function for out of process applications to set up either a socket or

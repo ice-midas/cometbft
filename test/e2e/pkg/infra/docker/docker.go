@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"text/template"
 
-	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
-	"github.com/cometbft/cometbft/test/e2e/pkg/exec"
-	"github.com/cometbft/cometbft/test/e2e/pkg/infra"
+	e2e "github.com/ice-blockchain/cometbft/test/e2e/pkg"
+	"github.com/ice-blockchain/cometbft/test/e2e/pkg/exec"
+	"github.com/ice-blockchain/cometbft/test/e2e/pkg/infra"
 )
 
 const DockerComposeFile = "compose.yaml"

@@ -3,9 +3,9 @@ package txindex
 import (
 	"context"
 
-	"github.com/cometbft/cometbft/libs/service"
-	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	"github.com/ice-blockchain/cometbft/state/indexer"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // XXX/TODO: These types should be moved to the indexer package.

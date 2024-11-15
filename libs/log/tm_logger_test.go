@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cometbft/cometbft/libs/log"
+	"github.com/ice-blockchain/cometbft/libs/log"
 )
 
 func TestLoggerLogsItsErrors(t *testing.T) {

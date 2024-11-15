@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/cometbft/cometbft/crypto"
-	sm "github.com/cometbft/cometbft/state"
+	"github.com/ice-blockchain/cometbft/crypto"
+	sm "github.com/ice-blockchain/cometbft/state"
 )
 
 // ----------------------------------------------------------------------------

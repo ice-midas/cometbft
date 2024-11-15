@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/cometbft/cometbft/config"
+	"github.com/ice-blockchain/cometbft/config"
 )
 
 // -----------------------------------------------------------------------------

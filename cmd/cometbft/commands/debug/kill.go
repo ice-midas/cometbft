@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/cli"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	cfg "github.com/ice-blockchain/cometbft/config"
+	"github.com/ice-blockchain/cometbft/libs/cli"
+	rpchttp "github.com/ice-blockchain/cometbft/rpc/client/http"
 )
 
 var killCmd = &cobra.Command{

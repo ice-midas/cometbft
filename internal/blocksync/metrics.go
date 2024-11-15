@@ -1,8 +1,8 @@
 package blocksync
 
 import (
-	"github.com/cometbft/cometbft/libs/metrics"
-	"github.com/cometbft/cometbft/types"
+	"github.com/ice-blockchain/cometbft/libs/metrics"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 const (

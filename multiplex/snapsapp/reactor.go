@@ -1,7 +1,7 @@
 package snapsapp
 
 import (
-	"github.com/cometbft/cometbft/multiplex/snapshots"
+	"github.com/ice-blockchain/cometbft/multiplex/snapshots"
 )
 
 // Reactor defines the implementation contract for the multiplex reactor

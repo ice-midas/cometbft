@@ -3,10 +3,10 @@ package privval
 import (
 	"io"
 
-	privvalproto "github.com/cometbft/cometbft/api/cometbft/privval/v1"
-	"github.com/cometbft/cometbft/libs/service"
-	cmtsync "github.com/cometbft/cometbft/libs/sync"
-	"github.com/cometbft/cometbft/types"
+	privvalproto "github.com/ice-blockchain/cometbft/api/cometbft/privval/v1"
+	"github.com/ice-blockchain/cometbft/libs/service"
+	cmtsync "github.com/ice-blockchain/cometbft/libs/sync"
+	"github.com/ice-blockchain/cometbft/types"
 )
 
 // ValidationRequestHandlerFunc handles different remoteSigner requests.
