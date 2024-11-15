@@ -5,9 +5,25 @@ option go_package = "github.com/cometbft/cometbft/api/cometbft/multiplex/v1";
 
 import "gogoproto/gogo.proto";
 import "cometbft/state/v1/types.proto";
+import "cometbft/p2p/v1/types.proto";
+import "cometbft/multiplex/v1/types.proto";
 
 // HistoricalState contains a sm.State and a custom data payload.
 message HistoricalState {
   cometbft.state.v1.State state = 1 [(gogoproto.nullable) = false];
   bytes                   data  = 2;
+}
+
+// HistoricalNodeInfo is the node information exchanged by historical nodes
+// of a multi-network infra during the CometBFT P2P handshake.
+message HistoricalNodeInfo {
+  repeated string networks = 1;
+  repeated cometbft.multiplex.v1.ChainProtocolVersion protocol_versions = 2;
+
+  string                   default_node_id   = 3 [(gogoproto.customname) = "DefaultNodeID"];
+  string                   listen_addr       = 4;
+  string                   version           = 5;
+  bytes                    channels          = 6;
+  string                   moniker           = 7;
+  cometbft.p2p.v1.DefaultNodeInfoOther other = 8 [(gogoproto.nullable) = false];
 }
